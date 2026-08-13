@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Secrets
+.env
+
+# Experiment artifacts (tracked via W&B / external storage, not git)
+data/raw/*
+data/processed/*
+data/checkpoints/*
+data/results/*
+data/feedback/*
+!data/*/.gitkeep
+wandb/
+outputs/
+*.pt
+*.ckpt
+*.hdf5
+
+# Large robot assets (use Git LFS if committing)
+assets/robots/**/*.stl
+assets/robots/**/*.dae
+assets/robots/**/*.obj
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# LaTeX
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.synctex.gz

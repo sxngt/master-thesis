@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quadruped-rl"
+version = "0.1.0"
+description = "Systematic comparison of RL algorithms and LLM-integrated feedback for quadruped rough-terrain locomotion"
+authors = [{ name = "Gihwan Kim", email = "sxngt.dev@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.1",
+    "pyyaml>=6.0",
+    "h5py>=3.9",
+    "scipy>=1.11",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "seaborn>=0.13",
+    "statsmodels>=0.14",
+    "wandb>=0.16",
+    "optuna>=3.4",
+    "anthropic>=0.34",
+    "openai>=1.30",
+    "pydantic>=2.5",
+    "python-dotenv>=1.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+sim = ["pybullet>=3.2.6"]  # Isaac Gym is installed separately (NVIDIA download)
+
+[dependency-groups]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
