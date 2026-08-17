@@ -1,0 +1,2 @@
+# Baseline terrain (Phase 1 only; not part of the 12 rough-terrain scenarios)
+terrain: { name: flat, category: baseline, friction: 1.0 }

@@ -1,0 +1,8 @@
+terrain:
+  name: sand
+  category: irregular
+  levels:
+    easy:   { sink_depth_m: 0.01 }
+    medium: { sink_depth_m: 0.02 }
+    hard:   { sink_depth_m: 0.03 }
+  friction: 0.5

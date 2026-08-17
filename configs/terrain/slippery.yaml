@@ -1,0 +1,7 @@
+terrain:
+  name: slippery
+  category: extreme
+  levels:
+    easy:   { friction: 0.30 }
+    medium: { friction: 0.20 }
+    hard:   { friction: 0.10 }

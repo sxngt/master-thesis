@@ -1,0 +1,8 @@
+terrain:
+  name: gap
+  category: structured
+  levels:
+    easy:   { gap_width_m: 0.10 }
+    medium: { gap_width_m: 0.25 }
+    hard:   { gap_width_m: 0.40 }
+  friction: 0.8

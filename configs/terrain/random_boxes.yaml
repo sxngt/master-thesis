@@ -1,0 +1,8 @@
+terrain:
+  name: random_boxes
+  category: composite
+  levels:
+    easy:   { box_height_max_m: 0.05, density_per_m2: 0.5 }
+    medium: { box_height_max_m: 0.10, density_per_m2: 1.0 }
+    hard:   { box_height_max_m: 0.18, density_per_m2: 2.0 }
+  friction: 0.8

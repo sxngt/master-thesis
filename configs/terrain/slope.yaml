@@ -1,0 +1,8 @@
+terrain:
+  name: slope
+  category: structured
+  levels:
+    easy:   { incline_deg: 10 }
+    medium: { incline_deg: 22 }
+    hard:   { incline_deg: 35 }
+  friction: 0.8

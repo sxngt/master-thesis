@@ -1,0 +1,8 @@
+terrain:
+  name: stairs
+  category: structured
+  levels:
+    easy:   { step_height_m: 0.05, step_depth_m: 0.30 }
+    medium: { step_height_m: 0.12, step_depth_m: 0.28 }
+    hard:   { step_height_m: 0.20, step_depth_m: 0.25 }
+  friction: 0.8

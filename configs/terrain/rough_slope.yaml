@@ -1,0 +1,8 @@
+terrain:
+  name: rough_slope
+  category: extreme
+  levels:
+    easy:   { incline_deg: 10, roughness_m: 0.02 }
+    medium: { incline_deg: 20, roughness_m: 0.05 }
+    hard:   { incline_deg: 30, roughness_m: 0.08 }
+  friction: 0.7

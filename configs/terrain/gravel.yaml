@@ -1,0 +1,8 @@
+terrain:
+  name: gravel
+  category: irregular
+  levels:
+    easy:   { particle_size_m: 0.01 }
+    medium: { particle_size_m: 0.03 }
+    hard:   { particle_size_m: 0.05 }
+  friction: 0.7

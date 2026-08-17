@@ -1,0 +1,8 @@
+terrain:
+  name: seesaw
+  category: composite
+  levels:
+    easy:   { max_tilt_deg: 5,  board_length_m: 2.0 }
+    medium: { max_tilt_deg: 10, board_length_m: 1.5 }
+    hard:   { max_tilt_deg: 15, board_length_m: 1.2 }
+  friction: 0.8

@@ -1,0 +1,8 @@
+terrain:
+  name: grass
+  category: irregular
+  levels:
+    easy:   { blade_height_m: 0.05, drag_coef: 0.1 }
+    medium: { blade_height_m: 0.10, drag_coef: 0.25 }
+    hard:   { blade_height_m: 0.15, drag_coef: 0.4 }
+  friction: 0.6

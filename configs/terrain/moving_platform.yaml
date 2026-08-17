@@ -1,0 +1,8 @@
+terrain:
+  name: moving_platform
+  category: composite
+  levels:
+    easy:   { amplitude_m: 0.03, frequency_hz: 0.3 }
+    medium: { amplitude_m: 0.06, frequency_hz: 0.6 }
+    hard:   { amplitude_m: 0.10, frequency_hz: 1.0 }
+  friction: 0.8
