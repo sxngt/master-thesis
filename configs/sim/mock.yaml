@@ -1,0 +1,4 @@
+# Deterministic mock backend: smoke tests / CI only — never for reported results
+sim:
+  backend: mock
+  num_envs: 4

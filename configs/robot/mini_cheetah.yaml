@@ -1,0 +1,11 @@
+robot:
+  name: mini_cheetah
+  urdf: assets/robots/mini_cheetah/mini_cheetah.urdf
+  mass_kg: 9.0
+  num_joints: 12
+  default_joint_pos: [0.0, -0.8, 1.6,  0.0, -0.8, 1.6,  0.0, -0.8, 1.6,  0.0, -0.8, 1.6]
+  torque_limit_nm: 17.0
+  control: { type: torque, stiffness: 20.0, damping: 0.5 }
+  sensors:
+    proprioceptive: { joint_pos: true, joint_vel: true, joint_torque: true, imu: true, rate_hz: 1000 }
+    exteroceptive: { foot_contact_force: true, depth_camera: false, lidar: false }

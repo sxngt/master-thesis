@@ -1,0 +1,8 @@
+# Cross-validation simulator #1 (CPU, portable)
+sim:
+  backend: pybullet
+  num_envs: 16
+  physics:
+    solver: SI
+    num_solver_iterations: 50
+    contact_erp: 0.2

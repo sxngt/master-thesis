@@ -1,0 +1,11 @@
+robot:
+  name: anymal_c
+  urdf: assets/robots/anymal_c/anymal_c.urdf
+  mass_kg: 50.0
+  num_joints: 12
+  default_joint_pos: [0.0, 0.4, -0.8,  0.0, 0.4, -0.8,  0.0, -0.4, 0.8,  0.0, -0.4, 0.8]
+  torque_limit_nm: 80.0
+  control: { type: position, stiffness: 80.0, damping: 2.0 }
+  sensors:
+    proprioceptive: { joint_pos: true, joint_vel: true, joint_torque: true, imu: true, rate_hz: 1000 }
+    exteroceptive: { foot_contact_force: true, depth_camera: true, lidar: true }

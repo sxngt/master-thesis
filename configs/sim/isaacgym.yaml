@@ -1,0 +1,10 @@
+# PRIMARY training simulator: GPU-parallel massive sampling
+sim:
+  backend: isaacgym
+  num_envs: 4096
+  physics:                       # aligned to measured values via system identification
+    solver: PGS
+    num_position_iterations: 4
+    num_velocity_iterations: 1
+    contact_stiffness: 1.0e5
+    contact_damping: 200.0

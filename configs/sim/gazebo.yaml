@@ -1,0 +1,7 @@
+# Cross-validation simulator #2 (ROS bridge; hardware staging for Phase 5)
+sim:
+  backend: gazebo
+  num_envs: 1
+  physics:
+    engine: ode
+    max_step_size: 0.001
