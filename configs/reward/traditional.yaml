@@ -1,0 +1,11 @@
+reward:
+  name: traditional
+  components:
+    forward_velocity: { weight: 1.0, target_ms: 1.0 }
+    energy: { weight: -0.002 }          # torque^2 penalty
+    stability: { weight: -0.5 }          # roll/pitch deviation penalty
+    foot_slip: { weight: -0.1 }
+    joint_limit: { weight: -0.2 }
+    action_rate: { weight: -0.01 }
+    alive_bonus: { weight: 0.1 }
+    termination: { weight: -10.0 }       # fall penalty

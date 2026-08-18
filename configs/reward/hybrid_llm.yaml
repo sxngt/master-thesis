@@ -1,0 +1,16 @@
+reward:
+  name: hybrid_llm
+  # R_total = alpha * R_traditional + beta * R_LLM + gamma * R_human_preference
+  # Weights optimized by meta-learning (harness/meta_weights.py); values below are init.
+  alpha: 1.0
+  beta: 0.3
+  gamma: 0.2
+  traditional: { inherit: reward/traditional.yaml }
+  llm:
+    provider: anthropic                  # anthropic | openai
+    model: claude-sonnet-5
+    batch_size: 16                       # trajectories per LLM evaluation call
+    cache: true
+  human_preference:
+    reward_model_checkpoint: null        # trained via llm_feedback/reward_model.py
+    update_interval_steps: 2_000_000
