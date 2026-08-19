@@ -1,0 +1,8 @@
+experiment:
+  name: phase1_baseline
+  description: Baseline validation — single robot (A1), simple terrains, all algorithms
+  robots: [a1]
+  algorithms: [ppo, trpo, a3c, sac, td3, ddpg]
+  terrains: [flat, stairs]
+  seeds: [0, 1, 2]
+  reward: traditional

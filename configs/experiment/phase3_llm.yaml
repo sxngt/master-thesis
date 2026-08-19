@@ -1,0 +1,9 @@
+experiment:
+  name: phase3_llm
+  description: LLM-integrated feedback vs. traditional baseline
+  robots: [a1]
+  algorithms: [ppo, sac]                 # best on/off-policy from Phase 2 (update after analysis)
+  terrains: [stairs, gravel, slippery, rough_slope]
+  seeds: [0, 1, 2, 3, 4]
+  reward: hybrid_llm
+  baselines: { reward: traditional }     # paired runs for comparison

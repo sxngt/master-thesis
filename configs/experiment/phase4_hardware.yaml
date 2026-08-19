@@ -1,0 +1,11 @@
+experiment:
+  name: phase4_hardware
+  description: Sim-to-real transfer on physical Unitree A1 (selected scenarios)
+  robots: [a1]
+  algorithms: [best_from_phase3]
+  terrains: [stairs, slope, gravel]
+  safety:
+    emergency_stop: true
+    torque_scale: 0.8                    # conservative torque limit on hardware
+    max_velocity_ms: 0.8
+    safe_zone_required: true
