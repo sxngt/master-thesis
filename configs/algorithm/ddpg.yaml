@@ -1,0 +1,19 @@
+algorithm:
+  name: ddpg
+  type: off_policy
+  learning_rate: 1.0e-4
+  gamma: 0.99
+  tau: 0.005
+  noise_type: ou               # ou (Ornstein-Uhlenbeck) | parameter_space — compared in experiments
+  ou_theta: 0.15
+  ou_sigma: 0.2
+  param_noise_stddev: 0.1
+  buffer_size: 1_000_000
+  batch_size: 4096
+  warmup_steps: 10_000
+  network:
+    actor: { hidden: [512, 256, 128], activation: relu }
+    critic: { hidden: [512, 512, 256, 128], activation: relu }
+search_space:
+  learning_rate: { low: 1.0e-5, high: 1.0e-3, log: true }
+  noise_type: { choices: [ou, parameter_space] }

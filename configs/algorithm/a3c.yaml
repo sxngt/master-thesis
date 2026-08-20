@@ -1,0 +1,17 @@
+algorithm:
+  name: a3c
+  type: on_policy
+  learning_rate: 1.0e-4
+  gamma: 0.99
+  entropy_coef: 0.01
+  value_coef: 0.5
+  num_workers: 32              # asynchronous parallel workers (16-32)
+  rollout_steps: 20
+  gradient_accumulation: 4
+  max_grad_norm: 40.0
+  network:
+    actor: { hidden: [512, 256, 128], activation: relu, recurrent: true, lstm_hidden: 256 }
+    critic: { hidden: [512, 512, 256, 128], activation: relu }
+search_space:
+  learning_rate: { low: 1.0e-5, high: 1.0e-3, log: true }
+  num_workers: { choices: [16, 24, 32] }

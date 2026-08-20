@@ -1,0 +1,18 @@
+algorithm:
+  name: trpo
+  type: on_policy
+  gamma: 0.99
+  gae_lambda: 0.95
+  max_kl: 0.01
+  cg_iters: 10                 # conjugate gradient iterations for natural gradient
+  cg_damping: 0.1
+  line_search_steps: 10
+  line_search_backtrack: 0.8
+  value_lr: 1.0e-3
+  rollout_steps: 24
+  network:
+    actor: { hidden: [512, 256, 128], activation: tanh, recurrent: false }
+    critic: { hidden: [512, 512, 256, 128], activation: tanh }
+search_space:
+  max_kl: { low: 0.001, high: 0.05, log: true }
+  cg_damping: { low: 0.01, high: 0.3, log: true }
