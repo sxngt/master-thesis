@@ -1,0 +1,11 @@
+services:
+  trainer:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    env_file: ../.env
+    volumes:
+      - ../data:/workspace/data
+      - ../assets:/workspace/assets
+    deploy:
+      resources:
+        reservations:
+          devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
