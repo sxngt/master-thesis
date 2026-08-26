@@ -42,7 +42,7 @@
 ## 5. 강건성 프로토콜
 - 관측 노이즈 주입: σ ∈ {0, 0.01, 0.05}
 - 동역학 랜덤화 on/off 비교
-- sim-to-sim gap: `scripts/cross_validate.py` — Isaac Gym 학습 정책을 PyBullet/Gazebo에서 평가, 메트릭별 상대 격차 보고
+- sim-to-sim gap: `scripts/cross_validate.py` — Isaac Lab 학습 정책을 PyBullet/Gazebo에서 평가, 메트릭별 상대 격차 보고
 - sim-to-real gap: Phase 5, 실제 A1 대비 동일 메트릭
 
 ## 6. 통계 검정 (analysis/statistics.py)

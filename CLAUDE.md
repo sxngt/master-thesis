@@ -12,7 +12,7 @@
    `R_total = α·R_traditional + β·R_LLM + γ·R_human_preference`
 
 **연구 설계의 핵심: 동일한 알고리즘을 여러 시뮬레이터에서 검증한다.**
-학습은 Isaac Gym(GPU 병렬), 검증은 PyBullet/Gazebo 교차 평가(sim-to-sim gap).
+학습은 Isaac Lab(Isaac Sim, GPU 병렬), 검증은 PyBullet/Gazebo 교차 평가(sim-to-sim gap).
 따라서 시뮬레이터는 `envs/backends/` 플러그인 + `configs/sim/` 설정 그룹으로
 완전히 분리되어 있고, 알고리즘/보상/메트릭 코드는 시뮬레이터를 직접 import하지
 않는다. 실험 축은 5차원: 알고리즘(6) × 로봇(3) × 지형(12) × 시드(10) × 시뮬레이터.
@@ -31,8 +31,8 @@ configs/               # YAML 설정 (계층적 합성: default + algorithm/robo
   experiment/          # phase1_baseline ~ phase4_hardware 실험 정의
 src/quadruped_rl/      # 메인 패키지 (uv sync로 editable 설치)
   envs/                # BaseEnv 계약, 지형 생성, 커리큘럼
-    backends/          # 시뮬레이터 플러그인: isaac(주 학습), pybullet_backend,
-                       #   gazebo(교차 검증), mock(스모크/CI 전용)
+    backends/          # 시뮬레이터 플러그인: isaaclab_backend(주 학습, 실기 검증됨),
+                       #   pybullet_backend/gazebo(교차 검증), mock·mock_vec(CI 전용)
   algorithms/          # RL 알고리즘 구현 (base.py의 Algorithm 인터페이스 준수)
   rewards/             # 보상 컴포넌트 + 하이브리드 결합
   llm_feedback/        # 피드백 수집 → LLM 변환 → 보상 모델 파이프라인
@@ -56,12 +56,13 @@ make lint              # uv run ruff check + format check
 make smoke             # mock 백엔드 1분 sanity 학습
 
 # 개별 학습 (uv run 필수 — 시스템 python 사용 금지)
-uv run python scripts/train.py --sim isaacgym --algorithm ppo \
-    --robot a1 --terrain stairs --seed 0
+# Isaac Lab 학습은 env_isaaclab의 Python으로 (uv 환경 아님 — docs/setup.md):
+PYTHONPATH=src ~/anaconda3/envs/env_isaaclab/bin/python scripts/train.py \
+    --sim isaaclab --algorithm ppo --robot a1 --terrain stairs --seed 0
 uv run python scripts/run_matrix.py --experiment phase2_matrix   # 전체 매트릭스 (재개 지원)
 uv run python scripts/cross_validate.py \
     --checkpoint data/results/<run_id>/checkpoints/best.pt \
-    --sims isaacgym pybullet gazebo                              # 시뮬레이터 교차 검증
+    --sims isaaclab pybullet gazebo                              # 시뮬레이터 교차 검증
 uv run python scripts/evaluate.py --checkpoint data/results/<run_id>/checkpoints/best.pt
 uv run python scripts/sweep.py --algorithm sac --robot a1 --terrain stairs --trials 50
 uv run python scripts/analyze.py --experiment phase2_matrix \
@@ -89,8 +90,13 @@ uv run python scripts/analyze.py --experiment phase2_matrix \
 ### 시뮬레이터 백엔드 (이 연구의 구조적 핵심)
 - 모든 백엔드는 `envs/base_env.py::BaseEnv` 계약(observation_dim, action_dim,
   reset, step의 info dict 스키마)을 구현하고 `@register_env_backend("이름")`으로 등록.
-- 알고리즘·보상·메트릭·하네스 코드에서 `import isaacgym`/`import pybullet` 금지 —
+- 알고리즘·보상·메트릭·하네스 코드에서 `import isaaclab`/`import pybullet` 금지 —
   시뮬레이터 의존은 `envs/backends/` 안에만 존재해야 한다.
+- 벡터화 백엔드는 `VectorEnv` 계약(torch 텐서, auto-reset, 배치 info dict),
+  단일 백엔드는 `BaseEnv` 계약. 벡터화 보상 수정 시 rewards/vectorized.py와
+  traditional.py의 수치 동일성 테스트가 깨지지 않아야 한다.
+- Isaac Lab 코드는 uv 환경에서 실행 불가 — env_isaaclab의 Python 3.11로 실행하고,
+  isaaclab.envs 등 무거운 import는 AppLauncher 실행 이후에만(backend 내부 lazy import).
 - 백엔드 네이티브 의존성이 없으면 조용히 스킵됨 (backends/__init__.py의 lazy import).
   mock 백엔드는 항상 사용 가능.
 - 새 백엔드 추가: backends/에 파일 생성 + 등록 + `configs/sim/<이름>.yaml` 작성이 전부.
@@ -123,9 +129,10 @@ uv run python scripts/analyze.py --experiment phase2_matrix \
 
 ## Claude 작업 지침
 
-- **시뮬레이터 의존 코드 주의**: Isaac Gym은 이 머신에 설치되어 있지 않을 수
-  있음. `import isaacgym`이 필요한 코드는 실행 검증 대신 `tests/`의 순수 로직
-  테스트로 검증하고, 실기 검증이 필요하면 사용자에게 알릴 것.
+- **시뮬레이터 의존 코드 주의**: 이 머신에는 Isaac Lab이 `env_isaaclab`
+  (conda, Python 3.11)에 설치돼 있음. isaaclab 의존 코드의 실기 검증은
+  `PYTHONPATH=src ~/anaconda3/envs/env_isaaclab/bin/python`으로 실행 (docs/setup.md의
+  스모크 명령 참조). 순수 로직은 uv 환경의 `tests/`로 검증.
 - **실험 실행은 사용자 확인 후**: 학습 실행은 수 시간~수 일 소요. 임의로
   장시간 학습을 시작하지 말고, 스모크 테스트(`--smoke-test` 플래그, ~1분)로 검증.
 - **data/ 는 삭제·수정 금지**: 실험 산출물은 재생성 비용이 큼.

@@ -11,7 +11,7 @@ is always available.
 
 from quadruped_rl.envs.backends import mock  # noqa: F401  (always available)
 
-for _mod in ("isaac", "pybullet_backend", "gazebo"):
+for _mod in ("isaaclab_backend", "pybullet_backend", "gazebo"):
     try:
         __import__(f"quadruped_rl.envs.backends.{_mod}")
     except ImportError:

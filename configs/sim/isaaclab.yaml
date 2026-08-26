@@ -1,0 +1,9 @@
+# PRIMARY training simulator: Isaac Lab (Isaac Sim) — GPU-parallel.
+# Run with the Isaac Lab Python env (see docs/setup.md).
+sim:
+  backend: isaaclab
+  num_envs: 4096
+  headless: true
+  action_scale: 0.25           # joint target = default_pos + scale * action
+  course_length_m: 5.0         # progress distance defining episode success
+  terrain_level: easy          # easy | medium | hard (curriculum overrides later)
