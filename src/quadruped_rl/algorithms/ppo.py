@@ -1,8 +1,11 @@
 """PPO — reference implementation (clipped surrogate + optional adaptive KL).
 
-Serves as the template for the Algorithm interface; other algorithms follow
-this file's structure. Thesis spec (1.1.2): clipped objective with adaptive
-KL penalty in parallel; GAE-lambda adjusted by terrain complexity.
+Supports both env kinds:
+  - single BaseEnv (numpy I/O)      -> RolloutBuffer path
+  - VectorEnv (torch I/O, N envs)   -> VecRolloutBuffer path (Isaac Lab)
+
+Thesis spec (1.1.2): clipped objective with adaptive KL penalty in parallel;
+GAE-lambda adjusted by terrain complexity.
 """
 
 from __future__ import annotations
@@ -13,8 +16,9 @@ from typing import Any
 import numpy as np
 import torch
 
-from quadruped_rl.algorithms.base import Algorithm, RolloutBuffer
+from quadruped_rl.algorithms.base import Algorithm, RolloutBuffer, VecRolloutBuffer
 from quadruped_rl.algorithms.networks import Critic, GaussianActor
+from quadruped_rl.envs.base_env import VectorEnv
 from quadruped_rl.envs.curriculum import gae_lambda_for_terrain
 from quadruped_rl.registry import register_algorithm
 
@@ -31,52 +35,111 @@ class PPO(Algorithm):
             list(self.actor.parameters()) + list(self.critic.parameters()),
             lr=a["learning_rate"],
         )
-        gae_lambda = gae_lambda_for_terrain(
+        self.gae_lambda = gae_lambda_for_terrain(
             a["gae_lambda"], cfg.get("terrain", {}).get("category", "baseline")
         )
-        self.buffer = RolloutBuffer(a["rollout_steps"], obs_dim, act_dim, a["gamma"], gae_lambda)
+        self.buffer: RolloutBuffer | VecRolloutBuffer | None = None
         self.kl_penalty = float(a.get("adaptive_kl", {}).get("penalty_init", 0.0))
 
-    def _to_t(self, x: np.ndarray) -> torch.Tensor:
+    # ------------------------------------------------------------------ utils
+    def _to_t(self, x) -> torch.Tensor:
+        if isinstance(x, torch.Tensor):
+            return x.to(self.device, dtype=torch.float32)
         return torch.as_tensor(x, dtype=torch.float32, device=self.device)
 
     @torch.no_grad()
-    def act(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        dist = self.actor.dist(self._to_t(obs).unsqueeze(0))
+    def act(self, obs, deterministic: bool = False):
+        """Single obs [obs_dim] -> np action; batched [N, obs_dim] -> tensor."""
+        obs_t = self._to_t(obs)
+        batched = obs_t.ndim == 2
+        if not batched:
+            obs_t = obs_t.unsqueeze(0)
+        dist = self.actor.dist(obs_t)
         action = dist.mean if deterministic else dist.sample()
+        if batched:
+            return action
         return action.squeeze(0).cpu().numpy()
 
-    @torch.no_grad()
-    def _policy_step(self, obs: np.ndarray) -> tuple[np.ndarray, float, float]:
-        obs_t = self._to_t(obs).unsqueeze(0)
-        dist = self.actor.dist(obs_t)
-        action = dist.sample()
-        log_prob = dist.log_prob(action).sum(-1)
-        value = self.critic(obs_t)
-        return (action.squeeze(0).cpu().numpy(), float(log_prob), float(value))
-
+    # ------------------------------------------------------- collection paths
     def collect_and_update(self, env, obs):
+        if isinstance(env, VectorEnv):
+            return self._collect_vec(env, obs)
+        return self._collect_single(env, obs)
+
+    def _collect_single(self, env, obs):
+        a = self.acfg
+        if self.buffer is None:
+            self.buffer = RolloutBuffer(
+                a["rollout_steps"], self.obs_dim, self.act_dim, a["gamma"], self.gae_lambda
+            )
         steps = 0
         while not self.buffer.full:
-            action, log_prob, value = self._policy_step(obs)
+            with torch.no_grad():
+                obs_t = self._to_t(obs).unsqueeze(0)
+                dist = self.actor.dist(obs_t)
+                action_t = dist.sample()
+                log_prob = float(dist.log_prob(action_t).sum(-1))
+                value = float(self.critic(obs_t))
+            action = action_t.squeeze(0).cpu().numpy()
             next_obs, reward, done, _ = env.step(action)
             self.buffer.add(obs, action, reward, done, value, log_prob)
             obs = env.reset() if done else next_obs
             steps += 1
         with torch.no_grad():
             last_value = float(self.critic(self._to_t(obs).unsqueeze(0)))
-        metrics = self._update(last_value)
+        adv, ret = self.buffer.compute_returns(last_value)
+        metrics = self._update(
+            self._to_t(self.buffer.obs),
+            self._to_t(self.buffer.actions),
+            self._to_t(self.buffer.log_probs),
+            self._to_t(adv),
+            self._to_t(ret),
+        )
         return obs, metrics, steps
 
-    def _update(self, last_value: float) -> dict[str, float]:
+    def _collect_vec(self, env: VectorEnv, obs):
         a = self.acfg
-        adv, returns = self.buffer.compute_returns(last_value)
-        adv = (adv - adv.mean()) / (adv.std() + 1e-8)
+        if self.buffer is None:
+            self.buffer = VecRolloutBuffer(
+                a["rollout_steps"],
+                env.num_envs,
+                self.obs_dim,
+                self.act_dim,
+                a["gamma"],
+                self.gae_lambda,
+                device=self.device,
+            )
+        obs = self._to_t(obs)
+        while not self.buffer.full:
+            with torch.no_grad():
+                dist = self.actor.dist(obs)
+                actions = dist.sample()
+                log_probs = dist.log_prob(actions).sum(-1)
+                values = self.critic(obs)
+            next_obs, rewards, dones, _ = env.step(actions)
+            next_obs = self._to_t(next_obs)
+            self.buffer.add(
+                obs, actions, self._to_t(rewards), self._to_t(dones).float(), values, log_probs
+            )
+            obs = next_obs
+        with torch.no_grad():
+            last_values = self.critic(obs)
+        adv, ret = self.buffer.compute_returns(last_values)
+        flat = lambda x: x.reshape(-1, *x.shape[2:])  # noqa: E731  [T,N,...] -> [T*N,...]
+        metrics = self._update(
+            flat(self.buffer.obs),
+            flat(self.buffer.actions),
+            self.buffer.log_probs.reshape(-1),
+            adv.reshape(-1),
+            ret.reshape(-1),
+        )
+        steps = a["rollout_steps"] * env.num_envs
+        return obs, metrics, steps
 
-        obs = self._to_t(self.buffer.obs)
-        actions = self._to_t(self.buffer.actions)
-        old_log_probs = self._to_t(self.buffer.log_probs)
-        adv_t, ret_t = self._to_t(adv), self._to_t(returns)
+    # ------------------------------------------------------------------ update
+    def _update(self, obs, actions, old_log_probs, adv, returns) -> dict[str, float]:
+        a = self.acfg
+        adv = (adv - adv.mean()) / (adv.std() + 1e-8)
 
         n = len(obs)
         mb_size = max(n // a["num_minibatches"], 1)
@@ -93,13 +156,13 @@ class PPO(Algorithm):
 
                 clip = a["clip_range"]
                 surrogate = torch.min(
-                    ratio * adv_t[mb],
-                    ratio.clamp(1 - clip, 1 + clip) * adv_t[mb],
+                    ratio * adv[mb],
+                    ratio.clamp(1 - clip, 1 + clip) * adv[mb],
                 ).mean()
                 approx_kl = (old_log_probs[mb] - log_probs).mean()
                 policy_loss = -surrogate + self.kl_penalty * approx_kl
 
-                value_loss = (self.critic(obs[mb]) - ret_t[mb]).pow(2).mean()
+                value_loss = (self.critic(obs[mb]) - returns[mb]).pow(2).mean()
                 entropy = dist.entropy().sum(-1).mean()
                 loss = policy_loss + a["value_coef"] * value_loss - a["entropy_coef"] * entropy
 
@@ -123,6 +186,7 @@ class PPO(Algorithm):
                 self.kl_penalty *= 0.5
         return {"loss": float(np.mean(losses)), "approx_kl": mean_kl, "kl_penalty": self.kl_penalty}
 
+    # ------------------------------------------------------------------- io
     def save(self, path: str | Path) -> None:
         torch.save(
             {

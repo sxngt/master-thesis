@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from quadruped_rl.envs.base_env import BaseEnv
+from quadruped_rl.envs.base_env import BaseEnv, VectorEnv
 from quadruped_rl.registry import register_env_backend
 
 
@@ -60,3 +60,71 @@ class MockEnv(BaseEnv):
             "goal_distance_m": self.goal_distance_m,
         }
         return obs, reward, done, info
+
+
+@register_env_backend("mock_vec")
+class MockVectorEnv(VectorEnv):
+    """Vectorized mock backend (CPU torch tensors) — exercises the exact
+    VectorEnv contract Isaac Lab uses, without a simulator. CI/tests only."""
+
+    OBS_DIM = 48
+    ACT_DIM = 12
+
+    def __init__(self, cfg: dict[str, Any]):
+        super().__init__(cfg)
+        import torch
+
+        self.torch = torch
+        self._device = "cpu"
+        self.gen = torch.Generator().manual_seed(cfg["run"]["seed"])
+        self.goal_distance_m = 5.0
+        self._pos = torch.zeros(self.num_envs, 3)
+        self._t = torch.zeros(self.num_envs, dtype=torch.long)
+
+    @property
+    def observation_dim(self) -> int:
+        return self.OBS_DIM
+
+    @property
+    def action_dim(self) -> int:
+        return self.ACT_DIM
+
+    @property
+    def device(self) -> str:
+        return self._device
+
+    def _obs(self):
+        return self.torch.randn(self.num_envs, self.OBS_DIM, generator=self.gen)
+
+    def reset(self):
+        self._pos.zero_()
+        self._t.zero_()
+        return self._obs()
+
+    def step(self, actions):
+        torch = self.torch
+        actions = actions.detach().cpu()
+        self._t += 1
+        drive = torch.tanh(actions.mean(dim=-1))
+        self._pos[:, 0] += drive.clamp(min=0.0) * self.control_dt
+        rewards = drive - 0.01 * actions.square().mean(dim=-1)
+        reached = self._pos[:, 0] >= self.goal_distance_m
+        dones = (self._t >= self.max_steps) | reached
+        n = self.num_envs
+        info = {
+            "positions": self._pos.clone(),
+            "orientations_rpy": torch.randn(n, 3, generator=self.gen) * 0.02,
+            "torques": actions.clone(),
+            "joint_velocities": torch.randn(n, self.ACT_DIM, generator=self.gen) * 0.1,
+            "contact_forces": torch.randn(n, 4, generator=self.gen).abs() * 30.0,
+            "power_w": actions.abs().sum(dim=-1) * 5.0,
+            "falls": torch.zeros(n),
+            "reached_goal": reached.clone(),
+            "goal_distance_m": torch.full((n,), self.goal_distance_m),
+        }
+        # auto-reset finished envs
+        if dones.any():
+            idx = dones.nonzero(as_tuple=True)[0]
+            self._pos[idx] = 0.0
+            self._t[idx] = 0
+        return self._obs(), rewards, dones, info

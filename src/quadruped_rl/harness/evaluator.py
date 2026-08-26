@@ -10,6 +10,7 @@ from typing import Any
 
 import numpy as np
 
+from quadruped_rl.envs.base_env import VectorEnv
 from quadruped_rl.metrics.efficiency import cost_of_transport, torque_efficiency
 from quadruped_rl.metrics.locomotion import (
     completion_time_s,
@@ -32,8 +33,56 @@ class Evaluator:
         self.num_episodes = cfg["run"]["eval_episodes"]
 
     def run(self, algorithm) -> dict[str, float]:
-        episodes = [self._rollout(algorithm) for _ in range(self.num_episodes)]
+        if isinstance(self.env, VectorEnv):
+            episodes = self._rollout_vec(algorithm)
+        else:
+            episodes = [self._rollout(algorithm) for _ in range(self.num_episodes)]
         return self.aggregate(episodes)
+
+    _VEC_KEYS = (
+        "positions",
+        "orientations_rpy",
+        "torques",
+        "joint_velocities",
+        "contact_forces",
+        "falls",
+        "power_w",
+    )
+
+    def _rollout_vec(self, algorithm) -> list[dict[str, Any]]:
+        """Vectorized rollout: run all N envs, harvest the first
+        `eval_episodes` completed episodes (auto-reset semantics)."""
+        env = self.env
+        obs = env.reset()
+        acc: list[dict[str, list]] = [{k: [] for k in self._VEC_KEYS} for _ in range(env.num_envs)]
+        episodes: list[dict[str, Any]] = []
+        safety_limit = env.max_steps * (self.num_episodes + 1)
+        for _ in range(safety_limit):
+            actions = algorithm.act(obs, deterministic=True)
+            obs, _, dones, info = env.step(actions)
+            info_np = {k: self._to_np(v) for k, v in info.items()}
+            dones_np = self._to_np(dones).astype(bool)
+            for i in range(env.num_envs):
+                for k in self._VEC_KEYS:
+                    if k in info_np:
+                        acc[i][k].append(info_np[k][i])
+                if dones_np[i]:
+                    traj = {k: np.asarray(v) for k, v in acc[i].items() if v}
+                    traj["steps"] = len(acc[i]["positions"])
+                    traj["dt"] = env.control_dt
+                    traj["reached_goal"] = bool(info_np["reached_goal"][i])
+                    traj["goal_distance_m"] = float(info_np["goal_distance_m"][i])
+                    episodes.append(traj)
+                    acc[i] = {k: [] for k in self._VEC_KEYS}
+            if len(episodes) >= self.num_episodes:
+                break
+        return episodes[: self.num_episodes]
+
+    @staticmethod
+    def _to_np(x) -> np.ndarray:
+        if hasattr(x, "detach"):
+            return x.detach().cpu().numpy()
+        return np.asarray(x)
 
     def _rollout(self, algorithm) -> dict[str, Any]:
         obs = self.env.reset()

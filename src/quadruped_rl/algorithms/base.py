@@ -113,3 +113,58 @@ class ReplayBuffer:
             "next_obs": self.next_obs[idx],
             "dones": self.dones[idx],
         }
+
+
+class VecRolloutBuffer:
+    """On-policy storage for vectorized envs: [horizon, num_envs, ...] with
+    per-env GAE(lambda). Torch tensors, kept on the env's device."""
+
+    def __init__(
+        self,
+        horizon: int,
+        num_envs: int,
+        obs_dim: int,
+        act_dim: int,
+        gamma: float,
+        gae_lambda: float,
+        device: str = "cpu",
+    ):
+        import torch
+
+        self.h, self.n = horizon, num_envs
+        self.gamma, self.lam = gamma, gae_lambda
+        self.device = device
+        self.obs = torch.zeros(horizon, num_envs, obs_dim, device=device)
+        self.actions = torch.zeros(horizon, num_envs, act_dim, device=device)
+        self.rewards = torch.zeros(horizon, num_envs, device=device)
+        self.dones = torch.zeros(horizon, num_envs, device=device)
+        self.values = torch.zeros(horizon, num_envs, device=device)
+        self.log_probs = torch.zeros(horizon, num_envs, device=device)
+        self.ptr = 0
+
+    def add(self, obs, actions, rewards, dones, values, log_probs) -> None:
+        i = self.ptr
+        self.obs[i], self.actions[i] = obs, actions
+        self.rewards[i], self.dones[i] = rewards, dones
+        self.values[i], self.log_probs[i] = values, log_probs
+        self.ptr += 1
+
+    @property
+    def full(self) -> bool:
+        return self.ptr >= self.h
+
+    def compute_returns(self, last_values):
+        """last_values: [num_envs] bootstrap. Returns (adv, ret) [h, n]."""
+        import torch
+
+        adv = torch.zeros_like(self.rewards)
+        gae = torch.zeros(self.n, device=self.device)
+        for t in reversed(range(self.h)):
+            next_values = last_values if t == self.h - 1 else self.values[t + 1]
+            nonterminal = 1.0 - self.dones[t]
+            delta = self.rewards[t] + self.gamma * next_values * nonterminal - self.values[t]
+            gae = delta + self.gamma * self.lam * nonterminal * gae
+            adv[t] = gae
+        returns = adv + self.values
+        self.ptr = 0
+        return adv, returns
