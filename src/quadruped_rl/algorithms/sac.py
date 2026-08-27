@@ -139,10 +139,10 @@ class SAC(Algorithm):
                     p_t.mul_(1 - a["tau"]).add_(a["tau"] * p)
 
         return {
-            "q_loss": float(q_loss),
-            "actor_loss": float(actor_loss),
+            "q_loss": float(q_loss.detach()),
+            "actor_loss": float(actor_loss.detach()),
             "alpha": float(alpha),
-            "alpha_loss": float(alpha_loss),
+            "alpha_loss": float(alpha_loss.detach()),
         }
 
     def save(self, path: str | Path) -> None:

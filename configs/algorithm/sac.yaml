@@ -11,6 +11,7 @@ algorithm:
   buffer_size: 1_000_000
   batch_size: 4096
   warmup_steps: 10_000
+  steps_per_iteration: 256
   updates_per_step: 1
   network:
     actor: { hidden: [512, 256, 128], activation: relu }

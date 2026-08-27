@@ -17,13 +17,15 @@
 
 ## Phase 1 완료 전 구현 필요 (우선순위순)
 1. ~~Isaac Lab 백엔드~~ ✅ 완료 (잔여: moving_platform/seesaw 동적 지형,
-   rough_slope 표면 노이즈, mini_cheetah URDF→USD 변환, SAC 등 off-policy
-   알고리즘의 벡터 수집 경로)
-2. `algorithms/td3.py`, `ddpg.py` — sac.py 구조를 따라 구현
+   rough_slope 표면 노이즈, mini_cheetah URDF→USD 변환)
+2. ~~`algorithms/td3.py`, `ddpg.py`~~ ✅ 완료 (2026-09-01) — TD3: target policy
+   smoothing + delayed update(2:1) + clipped double Q; DDPG: OU 노이즈 및
+   adaptive parameter-space 노이즈 두 변형. 스모크 학습·메커니즘 단위 테스트 포함
 3. `algorithms/trpo.py` — CG natural gradient + line search
 4. `algorithms/a3c.py` — 비동기 워커 그룹
-5. `envs/backends/pybullet_backend.py` — 교차 검증용
-6. 커리큘럼-지형 연동 (terrain_level 승급 시 지형 재생성)
+5. off-policy 알고리즘(SAC/TD3/DDPG)의 VectorEnv 수집 경로 (Isaac Lab 학습용)
+6. `envs/backends/pybullet_backend.py` — 교차 검증용
+7. 커리큘럼-지형 연동 (terrain_level 승급 시 지형 재생성)
 
 ## 이후
 - Gazebo 백엔드 + ROS 브리지 (Phase 4-5)
