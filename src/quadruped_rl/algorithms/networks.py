@@ -79,3 +79,22 @@ class QCritic(nn.Module):
 
     def forward(self, obs: torch.Tensor, act: torch.Tensor) -> torch.Tensor:
         return self.net(torch.cat([obs, act], dim=-1)).squeeze(-1)
+
+
+class DeterministicActor(nn.Module):
+    """Deterministic policy mu(s) with tanh-bounded actions in [-1, 1]
+    (TD3/DDPG)."""
+
+    def __init__(self, obs_dim: int, act_dim: int, spec: dict):
+        super().__init__()
+        self.net = mlp(
+            obs_dim,
+            spec["hidden"],
+            act_dim,
+            activation=spec.get("activation", "relu"),
+            layer_norm=spec.get("layer_norm", False),
+            spectral_norm=spec.get("spectral_norm", False),
+        )
+
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        return torch.tanh(self.net(obs))
