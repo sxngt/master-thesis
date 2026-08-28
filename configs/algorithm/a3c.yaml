@@ -10,7 +10,7 @@ algorithm:
   gradient_accumulation: 4
   max_grad_norm: 40.0
   network:
-    actor: { hidden: [512, 256, 128], activation: relu, recurrent: true, lstm_hidden: 256 }
+    actor: { hidden: [512, 256, 128], activation: relu, recurrent: false, lstm_hidden: 256}  # LSTM path pending
     critic: { hidden: [512, 512, 256, 128], activation: relu }
 search_space:
   learning_rate: { low: 1.0e-5, high: 1.0e-3, log: true }

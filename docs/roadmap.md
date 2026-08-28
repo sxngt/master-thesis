@@ -21,11 +21,17 @@
 2. ~~`algorithms/td3.py`, `ddpg.py`~~ ✅ 완료 (2026-09-01) — TD3: target policy
    smoothing + delayed update(2:1) + clipped double Q; DDPG: OU 노이즈 및
    adaptive parameter-space 노이즈 두 변형. 스모크 학습·메커니즘 단위 테스트 포함
-3. `algorithms/trpo.py` — CG natural gradient + line search
-4. `algorithms/a3c.py` — 비동기 워커 그룹
+3. ~~`algorithms/trpo.py`~~ ✅ 완료 (2026-09-01) — CG 기반 natural gradient
+   (Fisher-vector product via KL 이중 미분), KL 제약 backtracking line search,
+   별도 value 회귀. 거부된 스텝은 파라미터 정확 복원
+4. ~~`algorithms/a3c.py`~~ ✅ 완료 (2026-09-01) — 워커 스레드별 독립 env+로컬
+   네트워크, n-step 리턴, gradient accumulation, 공유 글로벌 네트워크에 비동기
+   적용. VectorEnv 백엔드와는 비호환(설계상 CPU 워커 전제, 명시적 거부).
+   LSTM 액터 경로는 미구현
 5. off-policy 알고리즘(SAC/TD3/DDPG)의 VectorEnv 수집 경로 (Isaac Lab 학습용)
 6. `envs/backends/pybullet_backend.py` — 교차 검증용
 7. 커리큘럼-지형 연동 (terrain_level 승급 시 지형 재생성)
+8. A3C LSTM 액터 경로 (networks.py recurrent 플래그 연결)
 
 ## 이후
 - Gazebo 백엔드 + ROS 브리지 (Phase 4-5)
