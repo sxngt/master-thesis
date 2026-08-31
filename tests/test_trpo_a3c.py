@@ -5,6 +5,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
+from quadruped_rl.algorithms.base import RolloutBuffer  # noqa: E402
 from quadruped_rl.algorithms.trpo import (  # noqa: E402
     _flat_params,
     _set_flat_params,
@@ -63,20 +64,31 @@ def test_flat_params_roundtrip():
     torch.testing.assert_close(_flat_params(net), flat * 2.0)
 
 
+def _filled_trpo(algo, steps, rng, reward_fn):
+    algo.buffer = RolloutBuffer(
+        steps, algo.obs_dim, algo.act_dim, algo.acfg["gamma"], algo.acfg["gae_lambda"]
+    )
+    for _ in range(steps):
+        algo.buffer.add(
+            rng.standard_normal(algo.obs_dim),
+            rng.standard_normal(algo.act_dim),
+            reward_fn(),
+            0.0,
+            0.0,
+            0.0,
+        )
+    adv, ret = algo.buffer.compute_returns(0.0)
+    std = adv.std()
+    adv = (adv - adv.mean()) / (std + 1e-8)
+    t = algo._to_t
+    return (t(algo.buffer.obs), t(algo.buffer.actions), t(algo.buffer.log_probs), t(adv), t(ret))
+
+
 def test_trpo_update_respects_kl_constraint():
     cfg = _cfg("trpo", {"rollout_steps": 64, "max_kl": 0.01})
     algo = get_algorithm("trpo")(cfg, obs_dim=8, act_dim=2)
     rng = np.random.default_rng(0)
-    for _ in range(64):
-        algo.buffer.add(
-            rng.standard_normal(8),
-            rng.standard_normal(2),
-            rng.standard_normal(),
-            0.0,
-            rng.standard_normal(),
-            rng.standard_normal() * 0.1,
-        )
-    metrics = algo._update(last_value=0.0)
+    metrics = algo._update(*_filled_trpo(algo, 64, rng, lambda: float(rng.standard_normal())))
     if metrics["step_accepted"]:
         assert metrics["kl"] <= 0.01 + 1e-6
         assert metrics["surrogate_improvement"] > 0.0
@@ -90,12 +102,9 @@ def test_trpo_rejected_step_restores_params():
     cfg = _cfg("trpo", {"rollout_steps": 32, "line_search_steps": 3})
     algo = get_algorithm("trpo")(cfg, obs_dim=8, act_dim=2)
     rng = np.random.default_rng(1)
-    for _ in range(32):
-        algo.buffer.add(
-            rng.standard_normal(8), rng.standard_normal(2), 0.0, 0.0, 0.0, 0.0
-        )  # reward=0, value=0 -> adv=0
+    batch = _filled_trpo(algo, 32, rng, lambda: 0.0)  # adv == 0 everywhere
     before = _flat_params(algo.actor).clone()
-    metrics = algo._update(last_value=0.0)
+    metrics = algo._update(*batch)
     assert metrics["step_accepted"] == 0.0
     assert metrics["surrogate_improvement"] == 0.0
     torch.testing.assert_close(_flat_params(algo.actor), before)
