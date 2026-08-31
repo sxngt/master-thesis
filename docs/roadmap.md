@@ -28,10 +28,17 @@
    네트워크, n-step 리턴, gradient accumulation, 공유 글로벌 네트워크에 비동기
    적용. VectorEnv 백엔드와는 비호환(설계상 CPU 워커 전제, 명시적 거부).
    LSTM 액터 경로는 미구현
-5. off-policy 알고리즘(SAC/TD3/DDPG)의 VectorEnv 수집 경로 (Isaac Lab 학습용)
-6. `envs/backends/pybullet_backend.py` — 교차 검증용
-7. 커리큘럼-지형 연동 (terrain_level 승급 시 지형 재생성)
-8. A3C LSTM 액터 경로 (networks.py recurrent 플래그 연결)
+5. ~~SAC/TD3/DDPG + TRPO의 VectorEnv 수집 경로~~ ✅ 완료 (2026-09-01) —
+   ReplayBuffer 배치 삽입(랩어라운드), 배치 act(단일=numpy/배치=tensor),
+   벡터 OU 노이즈(done 행 리셋), TRPO VecRolloutBuffer 경로.
+   Isaac Lab 실기 스모크(SAC/TRPO, 16 envs) 통과. A3C 제외 5개 알고리즘이
+   Isaac Lab에서 학습 가능. off-policy는 num_envs 64-256 권장
+   (configs/sim/isaaclab.yaml 주석)
+6. **실제 수렴 검증 런** — PPO × A1 × flat/stairs, 4096 envs로 보행 학습
+   확인 + 보상 가중치 튜닝 (Phase 1 실질 목표)
+7. `envs/backends/pybullet_backend.py` — 교차 검증용
+8. 커리큘럼-지형 연동 (terrain_level 승급 시 지형 재생성)
+9. A3C LSTM 액터 경로 (networks.py recurrent 플래그 연결)
 
 ## 이후
 - Gazebo 백엔드 + ROS 브리지 (Phase 4-5)

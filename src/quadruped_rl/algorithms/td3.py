@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 from quadruped_rl.algorithms.base import Algorithm, ReplayBuffer
 from quadruped_rl.algorithms.networks import DeterministicActor, QCritic
+from quadruped_rl.envs.base_env import VectorEnv
 from quadruped_rl.registry import register_algorithm
 
 
@@ -50,14 +51,24 @@ class TD3(Algorithm):
         self._update_calls = 0
 
     @torch.no_grad()
-    def act(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
-        action = self.actor(obs_t).squeeze(0).cpu().numpy()
+    def act(self, obs, deterministic: bool = False):
+        """Single obs [obs_dim] -> np action; batched [N, obs_dim] -> tensor."""
+        obs_t = (
+            obs if isinstance(obs, torch.Tensor) else torch.as_tensor(obs, dtype=torch.float32)
+        ).to(self.device)
+        if obs_t.ndim == 2:
+            action = self.actor(obs_t)
+            if not deterministic:
+                action = action + torch.randn_like(action) * self.acfg["exploration_noise"]
+            return action.clamp(-1.0, 1.0)
+        action = self.actor(obs_t.unsqueeze(0)).squeeze(0).cpu().numpy()
         if not deterministic:
             action = action + self.rng.normal(0.0, self.acfg["exploration_noise"], self.act_dim)
         return np.clip(action, -1.0, 1.0).astype(np.float32)
 
     def collect_and_update(self, env, obs):
+        if isinstance(env, VectorEnv):
+            return self._collect_vec(env, obs)
         a = self.acfg
         metrics: dict[str, float] = {}
         for _ in range(a.get("steps_per_iteration", 256)):
@@ -73,6 +84,32 @@ class TD3(Algorithm):
                 for _ in range(a.get("updates_per_step", 1)):
                     metrics = self._update()
         return obs, metrics, a.get("steps_per_iteration", 256)
+
+    def _collect_vec(self, env, obs):
+        """VectorEnv collection (see sac.py note on num_envs sizing)."""
+        a = self.acfg
+        n = env.num_envs
+        metrics: dict[str, float] = {}
+        vec_steps = max(1, a.get("steps_per_iteration", 256) // n)
+        obs = (
+            obs
+            if isinstance(obs, torch.Tensor)
+            else torch.as_tensor(obs, dtype=torch.float32, device=self.device)
+        )
+        for _ in range(vec_steps):
+            if self._total_steps < a["warmup_steps"]:
+                actions = torch.rand(n, self.act_dim, device=obs.device) * 2 - 1
+            else:
+                with torch.no_grad():
+                    actions = self.act(obs, deterministic=False)
+            next_obs, rewards, dones, _ = env.step(actions)
+            self.buffer.add_batch(obs, actions, rewards, next_obs, dones)
+            obs = next_obs
+            self._total_steps += n
+            if self._total_steps >= a["warmup_steps"]:
+                for _ in range(a.get("updates_per_step", 1)):
+                    metrics = self._update()
+        return obs, metrics, vec_steps * n
 
     def _update(self) -> dict[str, float]:
         a = self.acfg

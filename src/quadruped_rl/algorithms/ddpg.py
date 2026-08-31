@@ -20,6 +20,7 @@ import torch.nn.functional as F
 
 from quadruped_rl.algorithms.base import Algorithm, ReplayBuffer
 from quadruped_rl.algorithms.networks import DeterministicActor, QCritic
+from quadruped_rl.envs.base_env import VectorEnv
 from quadruped_rl.registry import register_algorithm
 
 
@@ -90,19 +91,44 @@ class DDPG(Algorithm):
         self.param_sigma *= 1.01 if dist < target else 1.0 / 1.01
         return dist
 
+    # ------------------------------------------------ vectorized OU noise
+    def _vec_ou_sample(self, n: int, device) -> torch.Tensor:
+        """Batched OU process [N, act_dim]; rows reset on episode end."""
+        a = self.acfg
+        if getattr(self, "_vec_ou_state", None) is None or len(self._vec_ou_state) != n:
+            self._vec_ou_state = torch.zeros(n, self.act_dim, device=device)
+        self._vec_ou_state = self._vec_ou_state * (1.0 - a["ou_theta"]) + a[
+            "ou_sigma"
+        ] * torch.randn(n, self.act_dim, device=device)
+        return self._vec_ou_state
+
+    def _vec_ou_reset(self, dones: torch.Tensor) -> None:
+        if getattr(self, "_vec_ou_state", None) is not None and dones.any():
+            self._vec_ou_state[dones.bool()] = 0.0
+
     # ------------------------------------------------------------------- act
     @torch.no_grad()
-    def act(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+    def act(self, obs, deterministic: bool = False):
+        """Single obs [obs_dim] -> np action; batched [N, obs_dim] -> tensor."""
+        obs_t = (
+            obs if isinstance(obs, torch.Tensor) else torch.as_tensor(obs, dtype=torch.float32)
+        ).to(self.device)
         use_perturbed = not deterministic and self.noise_type == "parameter_space"
         actor = self.perturbed_actor if use_perturbed else self.actor
-        action = actor(obs_t).squeeze(0).cpu().numpy()
+        if obs_t.ndim == 2:
+            action = actor(obs_t)
+            if not deterministic and self.noise_type == "ou":
+                action = action + self._vec_ou_sample(len(obs_t), action.device)
+            return action.clamp(-1.0, 1.0)
+        action = actor(obs_t.unsqueeze(0)).squeeze(0).cpu().numpy()
         if not deterministic and self.noise_type == "ou":
             action = action + self.ou.sample()
         return np.clip(action, -1.0, 1.0).astype(np.float32)
 
     # ------------------------------------------------------------ collection
     def collect_and_update(self, env, obs):
+        if isinstance(env, VectorEnv):
+            return self._collect_vec(env, obs)
         a = self.acfg
         metrics: dict[str, float] = {}
         rng = self.buffer.rng
@@ -130,6 +156,39 @@ class DDPG(Algorithm):
             metrics["param_noise_dist"] = self._adapt_param_sigma()
             metrics["param_sigma"] = self.param_sigma
         return obs, metrics, a.get("steps_per_iteration", 256)
+
+    def _collect_vec(self, env, obs):
+        """VectorEnv collection (see sac.py note on num_envs sizing)."""
+        a = self.acfg
+        n = env.num_envs
+        metrics: dict[str, float] = {}
+        vec_steps = max(1, a.get("steps_per_iteration", 256) // n)
+        if self.noise_type == "parameter_space":
+            self._perturb_actor()
+        obs = (
+            obs
+            if isinstance(obs, torch.Tensor)
+            else torch.as_tensor(obs, dtype=torch.float32, device=self.device)
+        )
+        for _ in range(vec_steps):
+            if self._total_steps < a["warmup_steps"]:
+                actions = torch.rand(n, self.act_dim, device=obs.device) * 2 - 1
+            else:
+                with torch.no_grad():
+                    actions = self.act(obs, deterministic=False)
+            next_obs, rewards, dones, _ = env.step(actions)
+            self.buffer.add_batch(obs, actions, rewards, next_obs, dones)
+            if self.noise_type == "ou":
+                self._vec_ou_reset(dones)
+            obs = next_obs
+            self._total_steps += n
+            if self._total_steps >= a["warmup_steps"]:
+                for _ in range(a.get("updates_per_step", 1)):
+                    metrics = self._update()
+        if self.noise_type == "parameter_space":
+            metrics["param_noise_dist"] = self._adapt_param_sigma()
+            metrics["param_sigma"] = self.param_sigma
+        return obs, metrics, vec_steps * n
 
     # ---------------------------------------------------------------- update
     def _update(self) -> dict[str, float]:

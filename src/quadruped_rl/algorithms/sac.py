@@ -15,6 +15,7 @@ import torch.nn.functional as F
 
 from quadruped_rl.algorithms.base import Algorithm, ReplayBuffer
 from quadruped_rl.algorithms.networks import QCritic, mlp
+from quadruped_rl.envs.base_env import VectorEnv
 from quadruped_rl.registry import register_algorithm
 
 
@@ -77,12 +78,22 @@ class SAC(Algorithm):
         self._total_steps = 0
 
     @torch.no_grad()
-    def act(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+    def act(self, obs, deterministic: bool = False):
+        """Single obs [obs_dim] -> np action; batched [N, obs_dim] -> tensor."""
+        obs_t = (
+            obs if isinstance(obs, torch.Tensor) else torch.as_tensor(obs, dtype=torch.float32)
+        ).to(self.device)
+        batched = obs_t.ndim == 2
+        if not batched:
+            obs_t = obs_t.unsqueeze(0)
         action, _ = self.actor(obs_t, deterministic=deterministic, with_log_prob=False)
+        if batched:
+            return action
         return action.squeeze(0).cpu().numpy()
 
     def collect_and_update(self, env, obs):
+        if isinstance(env, VectorEnv):
+            return self._collect_vec(env, obs)
         a = self.acfg
         metrics: dict[str, float] = {}
         for _ in range(a.get("steps_per_iteration", 256)):
@@ -98,6 +109,39 @@ class SAC(Algorithm):
                 for _ in range(a["updates_per_step"]):
                     metrics = self._update()
         return obs, metrics, a.get("steps_per_iteration", 256)
+
+    def _explore_vec(self, obs: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            actions, _ = self.actor(obs, with_log_prob=False)
+        return actions
+
+    def _collect_vec(self, env, obs):
+        """VectorEnv collection: N transitions per sim step into the replay
+        buffer. NOTE: for off-policy algorithms keep sim.num_envs moderate
+        (64-256) so the update-to-sample ratio stays reasonable —
+        see configs/sim/isaaclab.yaml."""
+        a = self.acfg
+        n = env.num_envs
+        metrics: dict[str, float] = {}
+        vec_steps = max(1, a.get("steps_per_iteration", 256) // n)
+        obs = (
+            obs
+            if isinstance(obs, torch.Tensor)
+            else torch.as_tensor(obs, dtype=torch.float32, device=self.device)
+        )
+        for _ in range(vec_steps):
+            if self._total_steps < a["warmup_steps"]:
+                actions = torch.rand(n, self.act_dim, device=obs.device) * 2 - 1
+            else:
+                actions = self._explore_vec(obs)
+            next_obs, rewards, dones, _ = env.step(actions)
+            self.buffer.add_batch(obs, actions, rewards, next_obs, dones)
+            obs = next_obs
+            self._total_steps += n
+            if self._total_steps >= a["warmup_steps"]:
+                for _ in range(a.get("updates_per_step", 1)):
+                    metrics = self._update()
+        return obs, metrics, vec_steps * n
 
     def _update(self) -> dict[str, float]:
         a = self.acfg

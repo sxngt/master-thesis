@@ -168,3 +168,30 @@ class VecRolloutBuffer:
         returns = adv + self.values
         self.ptr = 0
         return adv, returns
+
+
+def _replay_add_batch(buffer: ReplayBuffer, obs, actions, rewards, next_obs, dones) -> None:
+    """Vectorized insert of N transitions (with ring-buffer wraparound).
+
+    Accepts numpy arrays or torch tensors (detached/moved to CPU here) —
+    used by the VectorEnv collection paths of SAC/TD3/DDPG.
+    """
+
+    def np_of(x):
+        return x.detach().cpu().numpy() if hasattr(x, "detach") else np.asarray(x)
+
+    obs, actions = np_of(obs), np_of(actions)
+    rewards, next_obs = np_of(rewards), np_of(next_obs)
+    dones = np_of(dones).astype(np.float32)
+    n = len(obs)
+    idx = (buffer.ptr + np.arange(n)) % buffer.capacity
+    buffer.obs[idx] = obs
+    buffer.actions[idx] = actions
+    buffer.rewards[idx] = rewards
+    buffer.next_obs[idx] = next_obs
+    buffer.dones[idx] = dones
+    buffer.ptr = int((buffer.ptr + n) % buffer.capacity)
+    buffer.size = int(min(buffer.size + n, buffer.capacity))
+
+
+ReplayBuffer.add_batch = _replay_add_batch

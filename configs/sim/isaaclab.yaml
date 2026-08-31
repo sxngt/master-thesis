@@ -7,3 +7,7 @@ sim:
   action_scale: 0.25           # joint target = default_pos + scale * action
   course_length_m: 5.0         # progress distance defining episode success
   terrain_level: easy          # easy | medium | hard (curriculum overrides later)
+# NOTE (off-policy algorithms — SAC/TD3/DDPG): override num_envs down
+# (e.g. 64-256) so the update-to-sample ratio stays reasonable:
+#   --override sim.num_envs=128
+# On-policy (PPO/TRPO) benefits from the full 4096.

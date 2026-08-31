@@ -20,8 +20,9 @@ from typing import Any
 import numpy as np
 import torch
 
-from quadruped_rl.algorithms.base import Algorithm, RolloutBuffer
+from quadruped_rl.algorithms.base import Algorithm, RolloutBuffer, VecRolloutBuffer
 from quadruped_rl.algorithms.networks import Critic, GaussianActor
+from quadruped_rl.envs.base_env import VectorEnv
 from quadruped_rl.registry import register_algorithm
 
 
@@ -77,9 +78,7 @@ class TRPO(Algorithm):
         self.actor = GaussianActor(obs_dim, act_dim, net["actor"]).to(self.device)
         self.critic = Critic(obs_dim, net["critic"]).to(self.device)
         self.value_opt = torch.optim.Adam(self.critic.parameters(), lr=a["value_lr"])
-        self.buffer = RolloutBuffer(
-            a["rollout_steps"], obs_dim, act_dim, a["gamma"], a["gae_lambda"]
-        )
+        self.buffer: RolloutBuffer | VecRolloutBuffer | None = None
 
     def _to_t(self, x) -> torch.Tensor:
         if isinstance(x, torch.Tensor):
@@ -87,13 +86,30 @@ class TRPO(Algorithm):
         return torch.as_tensor(x, dtype=torch.float32, device=self.device)
 
     @torch.no_grad()
-    def act(self, obs: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        dist = self.actor.dist(self._to_t(obs).unsqueeze(0))
+    def act(self, obs, deterministic: bool = False):
+        """Single obs [obs_dim] -> np action; batched [N, obs_dim] -> tensor."""
+        obs_t = self._to_t(obs)
+        batched = obs_t.ndim == 2
+        if not batched:
+            obs_t = obs_t.unsqueeze(0)
+        dist = self.actor.dist(obs_t)
         action = dist.mean if deterministic else dist.sample()
+        if batched:
+            return action
         return action.squeeze(0).cpu().numpy()
 
     # ------------------------------------------------------------ collection
     def collect_and_update(self, env, obs):
+        if isinstance(env, VectorEnv):
+            return self._collect_vec(env, obs)
+        return self._collect_single(env, obs)
+
+    def _collect_single(self, env, obs):
+        a = self.acfg
+        if self.buffer is None:
+            self.buffer = RolloutBuffer(
+                a["rollout_steps"], self.obs_dim, self.act_dim, a["gamma"], a["gae_lambda"]
+            )
         steps = 0
         while not self.buffer.full:
             with torch.no_grad():
@@ -109,19 +125,60 @@ class TRPO(Algorithm):
             steps += 1
         with torch.no_grad():
             last_value = float(self.critic(self._to_t(obs).unsqueeze(0)))
-        metrics = self._update(last_value)
+        adv, returns = self.buffer.compute_returns(last_value)
+        adv = (adv - adv.mean()) / (adv.std() + 1e-8)
+        metrics = self._update(
+            self._to_t(self.buffer.obs),
+            self._to_t(self.buffer.actions),
+            self._to_t(self.buffer.log_probs),
+            self._to_t(adv),
+            self._to_t(returns),
+        )
+        return obs, metrics, steps
+
+    def _collect_vec(self, env, obs):
+        a = self.acfg
+        if self.buffer is None:
+            self.buffer = VecRolloutBuffer(
+                a["rollout_steps"],
+                env.num_envs,
+                self.obs_dim,
+                self.act_dim,
+                a["gamma"],
+                a["gae_lambda"],
+                device=self.device,
+            )
+        obs = self._to_t(obs)
+        while not self.buffer.full:
+            with torch.no_grad():
+                dist = self.actor.dist(obs)
+                actions = dist.sample()
+                log_probs = dist.log_prob(actions).sum(-1)
+                values = self.critic(obs)
+            next_obs, rewards, dones, _ = env.step(actions)
+            next_obs = self._to_t(next_obs)
+            self.buffer.add(
+                obs, actions, self._to_t(rewards), self._to_t(dones).float(), values, log_probs
+            )
+            obs = next_obs
+        with torch.no_grad():
+            last_values = self.critic(obs)
+        adv, returns = self.buffer.compute_returns(last_values)
+        adv = (adv - adv.mean()) / (adv.std() + 1e-8)
+        flat = lambda x: x.reshape(-1, *x.shape[2:])  # noqa: E731
+        metrics = self._update(
+            flat(self.buffer.obs),
+            flat(self.buffer.actions),
+            self.buffer.log_probs.reshape(-1),
+            adv.reshape(-1),
+            returns.reshape(-1),
+        )
+        steps = a["rollout_steps"] * env.num_envs
         return obs, metrics, steps
 
     # ---------------------------------------------------------------- update
-    def _update(self, last_value: float) -> dict[str, float]:
+    def _update(self, obs, actions, old_log_probs, adv_t, ret_t) -> dict[str, float]:
         a = self.acfg
-        adv, returns = self.buffer.compute_returns(last_value)
-        adv = (adv - adv.mean()) / (adv.std() + 1e-8)
-
-        obs = self._to_t(self.buffer.obs)
-        actions = self._to_t(self.buffer.actions)
-        old_log_probs = self._to_t(self.buffer.log_probs)
-        adv_t, ret_t = self._to_t(adv), self._to_t(returns)
         params = list(self.actor.parameters())
 
         with torch.no_grad():
