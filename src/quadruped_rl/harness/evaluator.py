@@ -123,7 +123,7 @@ class Evaluator:
             dt = e["dt"]
             if "positions" in e and len(e["positions"]) > 1:
                 vels.append(mean_forward_velocity(e["positions"], dt))
-                path_effs.append(path_efficiency(e["positions"], e["goal_distance_m"]))
+                path_effs.append(path_efficiency(e["positions"], 0.0))
             if "power_w" in e and "positions" in e:
                 dist = np.linalg.norm(e["positions"][-1] - e["positions"][0])
                 energy = float(np.sum(e["power_w"]) * dt)

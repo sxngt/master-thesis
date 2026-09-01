@@ -51,6 +51,30 @@ def action_rate(s: dict[str, Any], **_) -> float:
     return float(np.sum(np.square(da)))
 
 
+@register_reward_component("lateral_velocity")
+def lateral_velocity(s: dict[str, Any], **_) -> float:
+    """Penalize sideways drift (command frame tracks forward only)."""
+    return float(s.get("lateral_velocity_ms", 0.0)) ** 2
+
+
+@register_reward_component("yaw_rate")
+def yaw_rate(s: dict[str, Any], **_) -> float:
+    """Penalize turning: zero yaw-rate command. Without this the policy
+    walks perfect body-frame circles (observed 2026-09-01)."""
+    return float(s.get("yaw_rate_rads", 0.0)) ** 2
+
+
+@register_reward_component("feet_air_time")
+def feet_air_time(s: dict[str, Any], target_s: float = 0.5, **_) -> float:
+    """Minimal gait prior (legged_gym): reward swing phases approaching
+    target_s of air time, granted at touchdown. Without this, velocity-only
+    rewards admit degenerate noise-driven gaits (observed 2026-09-01)."""
+    first_contact = np.asarray(s.get("feet_first_contact", 0.0))
+    air_time = np.asarray(s.get("feet_last_air_time", 0.0))
+    moving = float(s.get("command_speed", 1.0)) > 0.1
+    return float(np.sum((air_time - target_s) * first_contact)) * moving
+
+
 @register_reward_component("alive_bonus")
 def alive_bonus(s: dict[str, Any], **_) -> float:
     return 0.0 if s.get("fallen", False) else 1.0

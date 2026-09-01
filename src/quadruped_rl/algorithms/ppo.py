@@ -110,18 +110,32 @@ class PPO(Algorithm):
                 device=self.device,
             )
         obs = self._to_t(obs)
+        reward_sum, vel_sum, n_steps = 0.0, 0.0, 0
         while not self.buffer.full:
             with torch.no_grad():
                 dist = self.actor.dist(obs)
                 actions = dist.sample()
                 log_probs = dist.log_prob(actions).sum(-1)
                 values = self.critic(obs)
-            next_obs, rewards, dones, _ = env.step(actions)
+            next_obs, rewards, dones, info = env.step(actions)
             next_obs = self._to_t(next_obs)
-            self.buffer.add(
-                obs, actions, self._to_t(rewards), self._to_t(dones).float(), values, log_probs
-            )
+            rewards = self._to_t(rewards)
+            # timeout bootstrapping (legged_gym): a truncated episode is not
+            # a true terminal — fold the value estimate back into the reward
+            if "time_outs" in info:
+                rewards = (
+                    rewards + self.acfg["gamma"] * values * self._to_t(info["time_outs"]).float()
+                )
+            self.buffer.add(obs, actions, rewards, self._to_t(dones).float(), values, log_probs)
             obs = next_obs
+            reward_sum += float(rewards.mean())
+            if "positions" in info:
+                vel_sum += (
+                    float(self._to_t(info["forward_velocity"]).mean())
+                    if "forward_velocity" in info
+                    else 0.0
+                )
+            n_steps += 1
         with torch.no_grad():
             last_values = self.critic(obs)
         adv, ret = self.buffer.compute_returns(last_values)
@@ -134,6 +148,10 @@ class PPO(Algorithm):
             ret.reshape(-1),
         )
         steps = a["rollout_steps"] * env.num_envs
+        metrics["mean_reward"] = reward_sum / max(n_steps, 1)
+        metrics["actor_std"] = float(self.actor.log_std.exp().mean())
+        if vel_sum:
+            metrics["mean_forward_velocity"] = vel_sum / max(n_steps, 1)
         return obs, metrics, steps
 
     # ------------------------------------------------------------------ update

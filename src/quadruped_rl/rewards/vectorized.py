@@ -44,6 +44,21 @@ def _action_rate(s: dict, **_) -> torch.Tensor:
     return torch.sum(torch.square(s["action_delta"]), dim=-1)
 
 
+def _lateral_velocity(s: dict, **_) -> torch.Tensor:
+    return torch.square(s["lateral_velocity_ms"])
+
+
+def _yaw_rate(s: dict, **_) -> torch.Tensor:
+    return torch.square(s["yaw_rate_rads"])
+
+
+def _feet_air_time(s: dict, target_s: float = 0.5, **_) -> torch.Tensor:
+    moving = (s.get("command_speed", torch.ones_like(s["forward_velocity_ms"])) > 0.1).float()
+    return (
+        torch.sum((s["feet_last_air_time"] - target_s) * s["feet_first_contact"], dim=-1) * moving
+    )
+
+
 def _alive_bonus(s: dict, **_) -> torch.Tensor:
     return (~s["fallen"]).float()
 
@@ -59,6 +74,9 @@ _COMPONENTS = {
     "foot_slip": _foot_slip,
     "joint_limit": _joint_limit,
     "action_rate": _action_rate,
+    "lateral_velocity": _lateral_velocity,
+    "yaw_rate": _yaw_rate,
+    "feet_air_time": _feet_air_time,
     "alive_bonus": _alive_bonus,
     "termination": _termination,
 }

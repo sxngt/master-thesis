@@ -286,6 +286,10 @@ def _make_quadruped_env_class():
             self._robot.set_joint_position_target(self._processed_actions)
 
         # ------------------------------------------------------------- obs
+        # Static observation scales (legged_gym convention) so all inputs
+        # land in a comparable range — raw joint_vel reaches +-21 rad/s.
+        OBS_SCALES = {"lin_vel": 2.0, "ang_vel": 0.25, "joint_vel": 0.05}
+
         def _get_observations(self) -> dict:
             self._previous_actions = self._actions.clone()
             data = self._robot.data
@@ -293,12 +297,12 @@ def _make_quadruped_env_class():
             commands[:, 0] = self._target_ms
             obs = torch.cat(
                 [
-                    data.root_lin_vel_b,
-                    data.root_ang_vel_b,
+                    data.root_lin_vel_b * self.OBS_SCALES["lin_vel"],
+                    data.root_ang_vel_b * self.OBS_SCALES["ang_vel"],
                     data.projected_gravity_b,
-                    commands,
+                    commands * self.OBS_SCALES["lin_vel"],
                     data.joint_pos - data.default_joint_pos,
-                    data.joint_vel,
+                    data.joint_vel * self.OBS_SCALES["joint_vel"],
                     self._actions,
                 ],
                 dim=-1,
@@ -319,8 +323,17 @@ def _make_quadruped_env_class():
             violation = torch.maximum(
                 data.joint_pos - limits[..., 1], limits[..., 0] - data.joint_pos
             )
+            first_contact = self._contact_sensor.compute_first_contact(
+                self.step_dt)[:, self._feet_ids]
+            last_air_time = self._contact_sensor.data.last_air_time[:, self._feet_ids]
             return {
                 "forward_velocity_ms": data.root_lin_vel_b[:, 0],
+                "lateral_velocity_ms": data.root_lin_vel_b[:, 1],
+                "yaw_rate_rads": data.root_ang_vel_b[:, 2],
+                "feet_first_contact": first_contact.float(),
+                "feet_last_air_time": last_air_time,
+                "command_speed": torch.full_like(data.root_lin_vel_b[:, 0],
+                                                 self._target_ms),
                 "torques": data.applied_torque,
                 "orientation_rpy": rpy,
                 "foot_slip_velocity": slip,
@@ -331,6 +344,10 @@ def _make_quadruped_env_class():
 
         def _get_rewards(self) -> torch.Tensor:
             total, _ = self._reward_fn(self._reward_state())
+            # KPI snapshot BEFORE DirectRLEnv resets done envs inside step():
+            # without this, terminal-step positions/falls read post-reset
+            # state (teleported to origin), zeroing every episode metric.
+            self._kpi_snapshot = self._compute_kpi()
             return total
 
         # ----------------------------------------------------------- dones
@@ -363,15 +380,22 @@ def _make_quadruped_env_class():
 
         # ------------------------------------------- KPI info (Evaluator)
         def kpi_info(self) -> dict[str, torch.Tensor]:
+            return self._kpi_snapshot
+
+        def _compute_kpi(self) -> dict[str, torch.Tensor]:
             data = self._robot.data
             progress = (data.root_pos_w[:, :2] - self._start_pos[:, :2]).norm(dim=-1)
             feet_forces = self._contact_sensor.data.net_forces_w[:, self._feet_ids].norm(dim=-1)
             power = torch.sum(torch.abs(data.applied_torque * data.joint_vel), dim=-1)
+            # NOTE: raw robot-data tensors are views into live sim buffers —
+            # they MUST be cloned or the snapshot silently reads post-reset
+            # state (positions teleported to origin) when consumed after step.
             return {
-                "positions": data.root_pos_w,
+                "forward_velocity": data.root_lin_vel_b[:, 0].clone(),
+                "positions": data.root_pos_w.clone(),
                 "orientations_rpy": self._rpy,
-                "torques": data.applied_torque,
-                "joint_velocities": data.joint_vel,
+                "torques": data.applied_torque.clone(),
+                "joint_velocities": data.joint_vel.clone(),
                 "contact_forces": feet_forces,
                 "power_w": power,
                 "falls": self._fallen.float(),
@@ -431,6 +455,7 @@ class IsaacLabEnv(VectorEnv):
         obs_dict, rewards, terminated, truncated, _ = self._env.step(actions)
         dones = terminated | truncated
         info = self._env.kpi_info()
+        info["time_outs"] = truncated  # for timeout value bootstrapping
         return obs_dict["policy"], rewards, dones, info
 
     def close(self) -> None:

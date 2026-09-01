@@ -53,6 +53,11 @@ def test_vectorized_reward_matches_traditional():
         "joint_limit_violation": rng.normal(-0.1, 0.1, (n, 12)),
         "action_delta": rng.normal(0, 0.1, (n, 12)),
         "fallen": rng.random(n) < 0.2,
+        "feet_first_contact": (rng.random((n, 4)) < 0.3).astype(np.float64),
+        "feet_last_air_time": rng.uniform(0.0, 1.0, (n, 4)),
+        "command_speed": np.full(n, 1.0),
+        "lateral_velocity_ms": rng.normal(0, 0.3, n),
+        "yaw_rate_rads": rng.normal(0, 0.5, n),
     }
     t_batch = {
         k: torch.as_tensor(v if k == "fallen" else np.asarray(v, np.float32))
@@ -61,6 +66,9 @@ def test_vectorized_reward_matches_traditional():
     total_vec, _ = vec(t_batch)
     for i in range(n):
         state = {k: (bool(v[i]) if k == "fallen" else v[i]) for k, v in batch.items()}
+        state["command_speed"] = float(state["command_speed"])
+        state["lateral_velocity_ms"] = float(state["lateral_velocity_ms"])
+        state["yaw_rate_rads"] = float(state["yaw_rate_rads"])
         total_ref, _ = ref(state)
         assert np.isclose(float(total_vec[i]), total_ref, rtol=1e-4), f"env {i}"
 
