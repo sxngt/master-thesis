@@ -2,10 +2,17 @@ reward:
   name: traditional
   components:
     forward_velocity: { weight: 1.0, target_ms: 1.0 }
-    energy: { weight: -0.002 }          # torque^2 penalty
+    energy: { weight: -2.5e-5 }         # torque^2 penalty; scale matches proven
+                                        # legged-RL configs (walking sum(tau^2)
+                                        # ~2000 -> -0.05/step vs velocity +1.0).
+                                        # -0.002 made standing optimal (2026-09-01)
     stability: { weight: -0.5 }          # roll/pitch deviation penalty
     foot_slip: { weight: -0.1 }
     joint_limit: { weight: -0.2 }
     action_rate: { weight: -0.01 }
+    feet_air_time: { weight: 1.0, target_s: 0.5 }   # minimal gait prior (legged_gym)
+    lateral_velocity: { weight: -1.0 }   # sideways drift penalty
+    yaw_rate: { weight: -0.5 }           # turning penalty — without it the policy
+                                         # walks body-frame circles (2026-09-01)
     alive_bonus: { weight: 0.1 }
     termination: { weight: -10.0 }       # fall penalty

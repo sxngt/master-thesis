@@ -51,7 +51,9 @@ class GaussianActor(nn.Module):
             layer_norm=spec.get("layer_norm", False),
             spectral_norm=spec.get("spectral_norm", False),
         )
-        self.log_std = nn.Parameter(torch.full((act_dim,), -0.5))
+        init_std = float(spec.get("init_noise_std", 1.0))
+        self.log_std = nn.Parameter(
+            torch.full((act_dim,), torch.log(torch.tensor(init_std)).item()))
 
     def dist(self, obs: torch.Tensor) -> torch.distributions.Normal:
         return torch.distributions.Normal(self.body(obs), self.log_std.exp())

@@ -6,7 +6,7 @@ algorithm:
   gae_lambda: 0.95             # dynamically adjusted by terrain complexity (see envs/curriculum.py)
   clip_range: 0.2
   adaptive_kl: { enabled: true, target_kl: 0.01, penalty_init: 1.0 }
-  entropy_coef: 0.01
+  entropy_coef: 0.005   # 0.01 kept std ~0.8; deterministic gait needs annealing
   value_coef: 0.5
   max_grad_norm: 1.0
   rollout_steps: 24            # per env per update
