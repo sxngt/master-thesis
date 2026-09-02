@@ -31,12 +31,12 @@ if importlib.util.find_spec("isaaclab") is None:  # keep backend unregistered
 _APP = None  # singleton SimulationApp (one per process)
 
 
-def _launch_app(headless: bool, device: str) -> None:
+def _launch_app(headless: bool, device: str, enable_cameras: bool = False) -> None:
     global _APP
     if _APP is None:
         from isaaclab.app import AppLauncher
 
-        _APP = AppLauncher(headless=headless, device=device).app
+        _APP = AppLauncher(headless=headless, device=device, enable_cameras=enable_cameras).app
 
 
 # --------------------------------------------------------------------------- #
@@ -217,6 +217,62 @@ def _build_env_cfg(cfg: dict[str, Any], num_joints: int):
     )
     env_cfg.action_scale = sim.get("action_scale", 0.25)
     env_cfg.robot_meta = robot_meta
+    env_cfg.photoreal = bool(sim.get("render"))
+    if sim.get("render"):
+        # ---- cinematic capture mode (RTX quality; offscreen chase camera) ----
+        from isaaclab.envs import ViewerCfg
+        from isaaclab.sim import RenderCfg
+
+        env_cfg.viewer = ViewerCfg(
+            origin_type="asset_root",
+            asset_name="robot",
+            env_index=0,
+            # elevated, pitched-down framing keeps the bare horizon line
+            # (reads as a "split screen") out of the shot
+            # low side-tracking shot: shows step height and the HDRI sky
+            eye=tuple(sim.get("camera_eye", (1.1, -2.1, 0.45))),
+            lookat=tuple(sim.get("camera_lookat", (0.3, 0.0, 0.05))),
+            resolution=tuple(sim.get("camera_resolution", (1920, 1080))),
+        )
+        env_cfg.sim.render = RenderCfg(
+            rendering_mode="quality",
+            antialiasing_mode="DLAA",  # best-quality AA, no ghosting
+            enable_reflections=True,
+            enable_global_illumination=True,
+            enable_translucency=True,
+            enable_dl_denoiser=True,
+        )
+        # photoreal ground: swap the flat debug-grid plane for a generated
+        # plane mesh so a visual MDL material can be applied
+        import isaaclab.terrains as tg
+        from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
+
+        if env_cfg.terrain.terrain_type == "plane":
+            env_cfg.terrain = TerrainImporterCfg(
+                prim_path="/World/ground",
+                terrain_type="generator",
+                terrain_generator=TerrainGeneratorCfg(
+                    size=(24.0, 24.0),
+                    border_width=1.0,
+                    num_rows=1,
+                    num_cols=1,
+                    sub_terrains={"flat": tg.MeshPlaneTerrainCfg(proportion=1.0)},
+                    use_cache=False,
+                ),
+                collision_group=-1,
+                physics_material=env_cfg.terrain.physics_material,
+                debug_vis=False,
+            )
+        if env_cfg.terrain.terrain_type == "generator":
+            # widen the world for capture: a 10 s rollout walks ~10 m and
+            # must not reach the terrain edge (bare void in frame)
+            env_cfg.terrain.terrain_generator.num_rows = 3
+            env_cfg.terrain.terrain_generator.num_cols = 3
+            env_cfg.terrain.terrain_generator.border_width = 8.0
+        env_cfg.terrain.visual_material = sim_utils.MdlFileCfg(
+            mdl_path="{NVIDIA_NUCLEUS_DIR}/Materials/Base/Architecture/Shingles_01.mdl",
+            project_uvw=True,
+        )
     return env_cfg
 
 
@@ -272,8 +328,25 @@ def _make_quadruped_env_class():
             self.scene.clone_environments(copy_from_source=False)
             if self.device == "cpu":
                 self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
-            light = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
-            light.func("/World/Light", light)
+            if getattr(self.cfg, "photoreal", False):
+                # HDRI sky + sun for capture: realistic ambient and shadows
+                from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+
+                # NOTE: light cfgs do NOT resolve {…_NUCLEUS_DIR} templates
+                # (unlike MdlFileCfg) — build the real path explicitly
+                sky = sim_utils.DomeLightCfg(
+                    intensity=900.0,
+                    texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/"
+                    "PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+                )
+                sky.func("/World/Sky", sky)
+                sun = sim_utils.DistantLightCfg(
+                    intensity=3000.0, angle=0.53, color=(1.0, 0.98, 0.92)
+                )
+                sun.func("/World/Sun", sun, orientation=(0.933, 0.259, 0.25, 0.0669))
+            else:
+                light = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
+                light.func("/World/Light", light)
 
         # ---------------------------------------------------------- control
         def _pre_physics_step(self, actions: torch.Tensor):
@@ -323,8 +396,9 @@ def _make_quadruped_env_class():
             violation = torch.maximum(
                 data.joint_pos - limits[..., 1], limits[..., 0] - data.joint_pos
             )
-            first_contact = self._contact_sensor.compute_first_contact(
-                self.step_dt)[:, self._feet_ids]
+            first_contact = self._contact_sensor.compute_first_contact(self.step_dt)[
+                :, self._feet_ids
+            ]
             last_air_time = self._contact_sensor.data.last_air_time[:, self._feet_ids]
             return {
                 "forward_velocity_ms": data.root_lin_vel_b[:, 0],
@@ -332,8 +406,7 @@ def _make_quadruped_env_class():
                 "yaw_rate_rads": data.root_ang_vel_b[:, 2],
                 "feet_first_contact": first_contact.float(),
                 "feet_last_air_time": last_air_time,
-                "command_speed": torch.full_like(data.root_lin_vel_b[:, 0],
-                                                 self._target_ms),
+                "command_speed": torch.full_like(data.root_lin_vel_b[:, 0], self._target_ms),
                 "torques": data.applied_torque,
                 "orientation_rpy": rpy,
                 "foot_slip_velocity": slip,
@@ -413,7 +486,11 @@ class IsaacLabEnv(VectorEnv):
     def __init__(self, cfg: dict[str, Any]):
         super().__init__(cfg)
         sim = cfg["sim"]
-        _launch_app(headless=sim.get("headless", True), device=cfg["run"].get("device", "cuda"))
+        _launch_app(
+            headless=sim.get("headless", True),
+            device=cfg["run"].get("device", "cuda"),
+            enable_cameras=bool(sim.get("render", False)),
+        )
 
         num_joints = cfg["robot"]["num_joints"]
         reward_cfg = cfg["reward"]
@@ -431,6 +508,7 @@ class IsaacLabEnv(VectorEnv):
             reward_fn=reward_fn,
             target_ms=target_ms,
             course_length_m=sim.get("course_length_m", 5.0),
+            render_mode="rgb_array" if sim.get("render") else None,
         )
         self._obs_dim = env_cfg.observation_space
         self._act_dim = num_joints
@@ -457,6 +535,10 @@ class IsaacLabEnv(VectorEnv):
         info = self._env.kpi_info()
         info["time_outs"] = truncated  # for timeout value bootstrapping
         return obs_dict["policy"], rewards, dones, info
+
+    def render(self):
+        """RGB frame [H, W, 3] of the chase camera (requires sim.render)."""
+        return self._env.render()
 
     def close(self) -> None:
         self._env.close()
