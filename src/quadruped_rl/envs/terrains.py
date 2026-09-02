@@ -49,9 +49,10 @@ def make_terrain(
     elif name == "gap":
         w = int(params["gap_width_m"] / resolution_m)
         hf[n // 2 : n // 2 + w, :] = -1.0
-    elif name in ("gravel", "grass", "sand", "mud"):
+    elif name in ("gravel", "grass", "sand", "mud", "rough"):
         amp = (
-            params.get("particle_size_m")
+            params.get("bump_height_m")
+            or params.get("particle_size_m")
             or params.get("blade_height_m")
             or params.get("sink_depth_m", 0.02)
         )

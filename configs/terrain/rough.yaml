@@ -1,0 +1,10 @@
+# Irregular bumpy ground (불규칙 요철 험지): random uniform height noise with
+# foot-scale bump wavelength (~25 cm). Dedicated rough-terrain study terrain.
+terrain:
+  name: rough
+  category: irregular
+  levels:
+    easy:   { bump_height_m: 0.025 }
+    medium: { bump_height_m: 0.05 }   # ~1/6 of A1 leg clearance — challenging, feasible blind
+    hard:   { bump_height_m: 0.08 }
+  friction: 0.8

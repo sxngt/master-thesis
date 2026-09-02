@@ -8,6 +8,7 @@ from quadruped_rl.envs.terrains import make_terrain
 from quadruped_rl.harness.config import compose_config
 
 ALL_TERRAINS = [
+    "rough",
     "stairs",
     "slope",
     "gap",
