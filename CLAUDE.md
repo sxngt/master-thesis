@@ -60,6 +60,7 @@ make smoke             # mock 백엔드 1분 sanity 학습
 PYTHONPATH=src ~/anaconda3/envs/env_isaaclab/bin/python scripts/train.py \
     --sim isaaclab --algorithm ppo --robot a1 --terrain stairs --seed 0
 uv run python scripts/run_matrix.py --experiment phase2_matrix   # 전체 매트릭스 (재개 지원)
+python3 scripts/run_jobs.py --jobs jobs.txt --parallel 2         # 4080: 2런 동시 실행이 최적 (docs/setup.md)
 uv run python scripts/cross_validate.py \
     --checkpoint data/results/<run_id>/checkpoints/best.pt \
     --sims isaaclab pybullet gazebo                              # 시뮬레이터 교차 검증

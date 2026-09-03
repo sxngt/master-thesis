@@ -43,3 +43,20 @@ docker compose -f docker/docker-compose.yml build
 - Isaac Lab 실행은 `env_isaaclab`의 Python 3.11 사용 (`PYTHONPATH=src` 방식,
   잠금 충돌 없음). legacy Isaac Gym Preview(≤Py3.8)는 사용하지 않는다 —
   주 학습 백엔드는 Isaac Lab(`envs/backends/isaaclab_backend.py`)이다.
+
+## 4080 단일 GPU 최고 효율 구성
+실측(TD3 학습 중): GPU util ~70 %, VRAM 3.1/16 GB → **2런 동시 실행이 최적**.
+
+1. CPU 거버너를 performance로 (Isaac 물리 호스트 측 병목 해소, 재부팅 시 초기화):
+   ```bash
+   sudo cpupower frequency-set -g performance
+   ```
+2. 배치는 순차 드라이버 대신 병렬 잡 스케줄러로 실행:
+   ```bash
+   # jobs.txt: 한 줄 = 학습 명령 1개 (matrix_runner의 export_jobs 출력과 호환)
+   python3 scripts/run_jobs.py --jobs jobs.txt --parallel 2 --gpus 0
+   ```
+   - 재개 지원(<jobs>.status.json), 실패 잡 격리, 잡별 로그
+   - 멀티 GPU가 생기면 `--parallel 4 --gpus 0,1,2,3`으로 그대로 확장(≈ ÷GPU 수)
+3. 특히 off-policy(SAC/TD3) 구간이 배치 시간의 대부분을 차지하므로
+   off-policy 잡끼리 병렬 배치하는 것이 효과가 가장 큼 (~1.4-1.6x).
