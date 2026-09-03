@@ -32,7 +32,12 @@ dependencies = [
 sim = ["pybullet>=3.2.6"]  # Isaac Gym is installed separately (NVIDIA download)
 
 [dependency-groups]
-dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "python-docx>=1.2.0",
+    "ruff>=0.4",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
