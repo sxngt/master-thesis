@@ -1,0 +1,6 @@
+Terrain,Metric,F,p,Eta Squared,Significant Pairs (Tukey HSD)
+Flat,Velocity,1.35,0.3249,0.34,none
+Stairs,Velocity,6.58,0.015,0.71,"TD3-TRPO (p=0.014, d=2.5)"
+Stairs,Success,4.0,0.0519,0.6,none
+Rough,Velocity,0.12,0.9439,0.04,none
+Rough,Success,0.67,0.5957,0.2,none
