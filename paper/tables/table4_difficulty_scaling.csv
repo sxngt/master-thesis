@@ -1,0 +1,21 @@
+Terrain,Level,Algorithm,Velocity (m/s),SD,Success Rate,Falls (/min)
+Stairs,Easy,PPO,1.041,0.006,1.0,9.9
+Stairs,Easy,SAC,0.988,0.025,1.0,9.5
+Stairs,Easy,TD3,0.956,0.076,0.33,11.3
+Stairs,Easy,TRPO,1.092,0.012,1.0,10.5
+Rough,Medium,PPO,0.883,0.181,0.67,33.4
+Rough,Medium,SAC,0.941,0.002,1.0,8.8
+Rough,Medium,TD3,0.876,0.027,1.0,8.2
+Rough,Medium,TRPO,0.875,0.255,0.67,31.0
+Stairs,Medium,PPO,0.903,0.012,0.0,12.5
+Stairs,Medium,SAC,0.901,0.114,0.0,30.0
+Stairs,Medium,TD3,0.833,0.188,0.0,23.5
+Stairs,Medium,TRPO,0.952,0.121,0.0,20.3
+Stairs,Hard,PPO,0.985,0.047,0.0,40.5
+Stairs,Hard,SAC,0.855,0.069,0.0,40.0
+Stairs,Hard,TD3,0.865,0.112,0.0,40.8
+Stairs,Hard,TRPO,0.887,0.055,0.0,39.4
+Rough,Hard,PPO,0.601,0.483,0.0,92.8
+Rough,Hard,SAC,0.09,0.058,0.0,75.0
+Rough,Hard,TD3,0.214,0.325,0.0,89.9
+Rough,Hard,TRPO,0.561,0.084,0.0,57.5

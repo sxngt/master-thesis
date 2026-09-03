@@ -38,7 +38,15 @@ def job_slug(cmd: str, idx: int) -> str:
 
 
 class JobRunner:
-    def __init__(self, jobs_path: Path, parallel: int, gpus: list[str], log_dir: Path):
+    def __init__(
+        self,
+        jobs_path: Path,
+        parallel: int,
+        gpus: list[str],
+        log_dir: Path,
+        success_pattern: str | None = None,
+    ):
+        self.success_pattern = success_pattern
         self.jobs = [
             ln.strip()
             for ln in jobs_path.read_text().splitlines()
@@ -78,6 +86,13 @@ class JobRunner:
                 cmd, shell=True, env=env, stdout=f, stderr=subprocess.STDOUT
             ).returncode
         state = "done" if rc == 0 else "failed"
+        # some frameworks (e.g. Isaac Sim) swallow exceptions and exit 0 —
+        # optionally require a success marker in the job log
+        if state == "done" and self.success_pattern:
+            import re as _re
+
+            if not _re.search(self.success_pattern, log.read_text(errors="ignore")):
+                state, rc = "failed", -2
         self.status[key] = {
             "state": state,
             "cmd": cmd,
@@ -117,11 +132,23 @@ def main() -> None:
     )
     p.add_argument("--gpus", default="0", help="comma-separated GPU ids, round-robin")
     p.add_argument("--log-dir", default=None)
+    p.add_argument(
+        "--success-pattern",
+        default=None,
+        help="regex that must appear in the job log for success "
+        "(guards against frameworks that swallow errors)",
+    )
     args = p.parse_args()
 
     jobs_path = Path(args.jobs)
     log_dir = Path(args.log_dir or jobs_path.parent / (jobs_path.stem + "_logs"))
-    runner = JobRunner(jobs_path, args.parallel, args.gpus.split(","), log_dir)
+    runner = JobRunner(
+        jobs_path,
+        args.parallel,
+        args.gpus.split(","),
+        log_dir,
+        success_pattern=args.success_pattern,
+    )
     raise SystemExit(runner.run())
 
 

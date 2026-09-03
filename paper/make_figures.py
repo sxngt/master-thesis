@@ -236,3 +236,75 @@ hist.columns = ["Algorithm", "Noise", "Terrain", "Seed", "Budget (steps)",
 hist.to_csv(TAB / "run_history.csv", index=False)
 print(f"  tab  run_history ({len(hist)} runs)")
 print("done.")
+
+# ================================================== 심화: 난이도·로봇 축 (밤샘 배치)
+night = pd.read_csv(ROOT / "data/results/night_batch/results_table.csv")
+
+# Table 4: A1 difficulty scaling
+a1n = night[night.robot == "a1"]
+base = core.copy()
+base["level"] = "easy"
+lvl_map = {"flat": None, "stairs": "easy", "rough": "medium"}  # baseline levels
+t4rows = []
+for (t, lv), grp in [(("stairs", "easy"), core[core.terrain == "stairs"]),
+                     (("rough", "medium"), core[core.terrain == "rough"])] + \
+                    [((t, lv), a1n[(a1n.terrain == t) & (a1n.level == lv)].rename(
+                        columns={"algo": "algorithm", "v": "mean_forward_velocity_ms",
+                                 "succ": "success_rate", "falls": "fall_frequency_per_min"}))
+                     for t, lv in [("stairs", "medium"), ("stairs", "hard"), ("rough", "hard")]]:
+    for a, g in grp.groupby("algorithm"):
+        if a not in ALGOS: continue
+        t4rows.append({"Terrain": TLABEL[t], "Level": lv.capitalize(),
+                       "Algorithm": a.upper(),
+                       "Velocity (m/s)": round(g.mean_forward_velocity_ms.mean(), 3),
+                       "SD": round(g.mean_forward_velocity_ms.std(ddof=1), 3),
+                       "Success Rate": round(g.success_rate.mean(), 2),
+                       "Falls (/min)": round(g.fall_frequency_per_min.mean(), 1)})
+pd.DataFrame(t4rows).to_csv(TAB / "table4_difficulty_scaling.csv", index=False)
+print("  tab  table4_difficulty_scaling")
+
+# Table 5: ANYmal-C transfer
+an = night[night.robot == "anymal_c"]
+t5 = an.groupby(["terrain", "algo"]).agg(
+    v=("v", "mean"), sd=("v", sd0), succ=("succ", "mean"),
+    falls=("falls", "mean"), cot=("cot", "mean")).round(3).reset_index()
+t5.columns = ["Terrain", "Algorithm", "Velocity (m/s)", "SD", "Success Rate",
+              "Falls (/min)", "Cost of Transport"]
+t5["Algorithm"] = t5["Algorithm"].str.upper()
+t5.to_csv(TAB / "table5_anymal_transfer.csv", index=False)
+print("  tab  table5_anymal_transfer")
+
+# Figure 6: difficulty scaling (success + velocity, offset to avoid overlap)
+LV = {"stairs": ["easy", "medium", "hard"], "rough": ["medium", "hard"]}
+BASE_LV = {"stairs": "easy", "rough": "medium"}
+
+
+def _lv_data(t, lv, a, col_core, col_night):
+    if lv == BASE_LV[t]:
+        g = core[(core.terrain == t) & (core.algorithm == a)]
+        return g[col_core].mean()
+    g = a1n[(a1n.terrain == t) & (a1n.level == lv) & (a1n.algo == a)]
+    return g[col_night].mean()
+
+
+with plt.rc_context(STYLE):
+    fig, axes = plt.subplots(2, 2, figsize=(W * 1.15, 4.2), sharex="col")
+    for col, t in enumerate(["stairs", "rough"]):
+        levels = LV[t]
+        x = np.arange(len(levels), dtype=float)
+        for i, a in enumerate(ALGOS):
+            off = (i - 1.5) * 0.045
+            succ = [_lv_data(t, lv, a, "success_rate", "succ") * 100 for lv in levels]
+            vel = [_lv_data(t, lv, a, "mean_forward_velocity_ms", "v") for lv in levels]
+            axes[0, col].plot(x + off, succ, "o-", color=COLOR[a], lw=1.3, ms=3.5,
+                              label=a.upper())
+            axes[1, col].plot(x + off, vel, "o-", color=COLOR[a], lw=1.3, ms=3.5)
+        axes[0, col].set_title(TLABEL[t])
+        axes[1, col].set_xticks(x, [lv.capitalize() for lv in levels])
+        axes[1, col].set_xlabel("Difficulty level")
+        axes[1, col].axhline(0.8, color="gray", ls="--", lw=0.7)
+    axes[0, 0].set_ylabel("Success rate (%)")
+    axes[1, 0].set_ylabel("Velocity (m/s)")
+    axes[0, 0].set_ylim(-5, 105)
+    axes[0, 0].legend(frameon=False, fontsize=7)
+    save(fig, "fig6_difficulty_scaling")
