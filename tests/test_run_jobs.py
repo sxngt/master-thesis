@@ -51,3 +51,35 @@ def test_gpu_round_robin_env(tmp_path):
     assert r.returncode == 0
     seen = sorted(line.split()[-1] for line in out.read_text().splitlines())
     assert seen == ["0", "0", "1", "1"]
+
+
+def test_reconcile_marks_finished_logs_done(tmp_path):
+    jobs = tmp_path / "jobs.txt"
+    jobs.write_text("echo one\necho two\n")
+    log_dir = tmp_path / "jobs_logs"
+    log_dir.mkdir()
+    # job "one" finished after its driver died: log carries the marker, no status
+    (log_dir / "000_4d4d7281bbfd.log").write_text('{"final": {}}\n')
+    r = _run(jobs, "--reconcile", "--success-pattern", '"final"')
+    assert "reconciled 1 job" in r.stdout
+    status = json.loads((jobs.parent / "jobs.txt.status.json").read_text())
+    by_cmd = {v["cmd"]: v for v in status.values()}
+    assert by_cmd["echo one"]["seconds"] == -1  # recovered, not re-run
+    assert by_cmd["echo two"]["seconds"] >= 0  # actually executed
+
+
+def test_skip_running_leaves_active_jobs_alone(tmp_path):
+    jobs = tmp_path / "jobs.txt"
+    marker = tmp_path / "ran.txt"
+    one, two = f"sleep 3; echo one >> {marker}", f"echo two >> {marker}"
+    jobs.write_text(f"{one}\n{two}\n")
+    # job "one" is still running under an earlier (killed) driver
+    orphan = subprocess.Popen(["sh", "-c", one])
+    try:
+        r = _run(jobs, "--skip-running")
+        assert "SKIP  000_" in r.stdout and "1 to run / 2 total" in r.stdout
+        assert marker.read_text() == "two\n"
+        status = json.loads((jobs.parent / "jobs.txt.status.json").read_text())
+        assert [v["cmd"] for v in status.values()] == [two]  # "one" left for reconcile
+    finally:
+        orphan.kill()

@@ -74,9 +74,25 @@ docker compose -f docker/docker-compose.yml build
   ```bash
   scripts/remote_sync.sh                                        # rsync (data/, .git 제외; .env는 별도 600)
   scripts/remote_sync.sh --launch data/results/coach_batch/jobs.txt   # 4 GPU × 2런 병렬
+  GPUS=3 PARALLEL=2 scripts/remote_sync.sh --launch <jobs>            # 다른 배치와 공유 시
   ```
   잡 파일의 인터프리터는 `$ISAAC_PY`로 결정되므로 로컬(env_isaaclab)과 서버
   (Isaac 4.5 python.sh)에서 같은 jobs.txt를 쓴다. 상태: `<jobs>.status.json`,
   드라이버 로그: `<jobs>.driver.log`.
-- Isaac python에 추가로 필요한 패키지: `pydantic openai python-dotenv pyyaml`
-  (`python.sh -m pip install …`, 최초 1회).
+- 재개: 같은 잡 파일로 `--launch`를 다시 실행하면 done은 건너뛰고 failed만
+  재실행한다. 드라이버만 죽이면(`pkill -f "run_jobs.py --jobs <jobs>"`) 자식 학습은
+  계속 돌아 로그를 끝까지 쓰므로, 재개 시 `--reconcile`이 로그의 성공 마커로
+  이들을 done 처리한다. 자식이 아직 도는 중에 재개하면 `--skip-running`으로
+  같은 명령이 이미 실행 중인 잡을 건너뛴다(중복 실행 방지; 나중에 `--reconcile`).
+  **서버에 다른 배치가 돌고 있으면 GPU를 나눠 쓸 것** —
+  드라이버는 자기 잡만 세어 GPU를 고르므로 남의 잡을 모르고, 4090 24 GB에
+  10 GB 잡 2개 + 코치 잡 1개면 OOM.
+- Isaac python에 추가로 필요한 패키지: `openai==1.85.0` (설치 완료). 최신 openai는
+  aiohttp 전송 계층을 번들하는데 Isaac Sim 4.5의 prebundled aiohttp가 구버전이라
+  import 시 `AttributeError: SocketTimeoutError` — 1.86 미만으로 고정할 것.
+  pydantic/dotenv/pyyaml은 Isaac에 이미 포함.
+- 서버 시스템 `python3`는 3.8 — `scripts/run_jobs.py`, `batch_status.py`처럼 시스템
+  python으로 도는 스크립트는 `from __future__ import annotations` 유지.
+- 실측 처리량 (PPO 4096 envs): GPU당 1잡 108k steps/s, 2잡 동시 46~66k/잡
+  (합계 ~120k). VRAM은 잡당 ~4.5 GB지만 GPU 연산·CPU(20스레드, 70 %)가 병목이라
+  GPU당 2잡(`--parallel 8`)이 상한. 40M 스텝 잡 ≈ 10분.

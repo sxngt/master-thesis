@@ -6,6 +6,8 @@ Usage:
     watch -n 30 python3 scripts/batch_status.py        # live board
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json

@@ -1,5 +1,6 @@
 """Reward coach: guardrail, schedulers, rollback loop, trainer wiring."""
 
+import copy
 import json
 
 import pytest
@@ -237,3 +238,45 @@ def test_trainer_runs_with_random_coach_on_mock_vec(tmp_path):
     ]
     assert any("coach/intervention" in r for r in records)
     assert (tmp_path / "run" / "coach_log.jsonl").exists()
+
+
+def test_coach_analysis_on_trainer_output(tmp_path):
+    """load_run / intervention_table / figures consume what the Trainer writes."""
+    from quadruped_rl.analysis.coach import (
+        intervention_table,
+        load_coach_table,
+        objective_curves,
+        parameter_trajectories,
+    )
+    from quadruped_rl.harness.trainer import Trainer
+
+    base = compose_config(sim="mock", algorithm="ppo", robot="a1", terrain="flat", coach="random")
+    base["sim"].update(backend="mock_vec", num_envs=4)
+    base["run"].update(
+        total_timesteps=2_000,
+        eval_interval_steps=400,
+        checkpoint_interval_steps=2_000,
+        eval_episodes=2,
+        device="cpu",
+    )
+    base["logging"]["wandb"] = False
+    base["algorithm"]["rollout_steps"] = 8
+    base["coach"].update(interval_steps=400, warmup_steps=400)
+    base["coach"]["params"] = {"drive.weight": {"low": 0.5, "high": 2.0}}
+    results = tmp_path / "results"
+    for seed in (0, 1):
+        cfg = copy.deepcopy(base)
+        cfg["run"]["seed"] = seed
+        Trainer(cfg, run_dir=results / f"coached_s{seed}").train()
+
+    table = load_coach_table(results)
+    assert len(table) == 2 and set(table["condition"]) == {"random"}
+    assert table["setting"].iloc[0] == "flat-easy-traditional"
+    assert (table["n_interventions"] > 0).all()
+    settled = table["n_kept"] + table["n_rolled_back"] + table["n_pending"]
+    assert settled.eq(table["n_interventions"]).all()
+    its = intervention_table(table)
+    assert set(its["status"]) <= {"kept", "rolled_back", "pending"}
+    objective_curves(table, "flat-easy-traditional", tmp_path / "fig" / "obj")
+    parameter_trajectories(table.iloc[0], {"drive.weight": (0.5, 2.0)}, tmp_path / "fig" / "p")
+    assert (tmp_path / "fig" / "obj.png").exists()
