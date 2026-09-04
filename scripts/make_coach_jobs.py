@@ -11,6 +11,9 @@ file runs locally (conda env_isaaclab) and on the 4x4090 server (Isaac Sim
 4.5 bundled python). Consume with scripts/run_jobs.py --gpus 0,1,2,3.
 
     python scripts/make_coach_jobs.py --out data/results/coach_batch/jobs.txt
+    # extend an existing batch (appended lines keep earlier job indices stable):
+    python scripts/make_coach_jobs.py --out ... --append --settings B --terrains rough \
+        --seeds 5 6 7 8 9
 """
 
 from __future__ import annotations
@@ -50,19 +53,22 @@ def main() -> None:
     p.add_argument("--steps", type=int, default=40_000_000)
     p.add_argument("--settings", nargs="+", default=["A", "B"])
     p.add_argument("--conditions", nargs="+", default=CONDITIONS)
+    p.add_argument("--terrains", nargs="+", default=None, help="restrict to these terrains")
+    p.add_argument("--append", action="store_true", help="append to --out (extend a batch)")
     args = p.parse_args()
 
     lines = []
     for tag, terrain, level, reward in SETTINGS:
-        if tag not in args.settings:
+        if tag not in args.settings or (args.terrains and terrain not in args.terrains):
             continue
         for coach in args.conditions:
             for seed in args.seeds:
                 lines.append(job(terrain, level, reward, coach, seed, args.steps))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(lines) + "\n")
-    print(f"{len(lines)} jobs -> {out}")
+    with out.open("a" if args.append else "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"{len(lines)} jobs -> {out}{' (appended)' if args.append else ''}")
 
 
 if __name__ == "__main__":
