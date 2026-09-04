@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
@@ -24,12 +25,37 @@ from quadruped_rl.llm_feedback.schemas import LLMRewardOutput
 log = logging.getLogger(__name__)
 
 
-class LLMClient:
-    """Thin provider-agnostic chat wrapper (anthropic | openai)."""
+def _load_dotenv() -> None:
+    """Load the repo-root .env (API keys) once; silently no-op if absent."""
+    try:
+        from dotenv import load_dotenv
 
-    def __init__(self, provider: str = "anthropic", model: str = "claude-sonnet-5"):
+        load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+    except Exception:  # pragma: no cover - optional convenience
+        pass
+
+
+class LLMClient:
+    """Thin provider-agnostic chat wrapper (anthropic | openai).
+
+    `reasoning_effort` is forwarded to OpenAI reasoning models (gpt-5.x / o-series);
+    for those the sampling temperature is fixed by the API, so determinism is
+    approximated by prompt caching + full prompt/response logging instead.
+    """
+
+    def __init__(
+        self,
+        provider: str = "anthropic",
+        model: str = "claude-sonnet-5",
+        reasoning_effort: str | None = None,
+        json_mode: bool = False,
+    ):
+        _load_dotenv()
         self.provider = provider
         self.model = model
+        self.reasoning_effort = reasoning_effort
+        self.json_mode = json_mode
+        self.last_usage: dict[str, int] = {}
         if provider == "anthropic":
             import anthropic
 
@@ -49,13 +75,31 @@ class LLMClient:
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )
+            self.last_usage = {
+                "input_tokens": resp.usage.input_tokens,
+                "output_tokens": resp.usage.output_tokens,
+            }
             return resp.content[0].text
-        resp = self._client.chat.completions.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        )
-        return resp.choices[0].message.content
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "max_completion_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        if self.reasoning_effort:
+            kwargs["reasoning_effort"] = self.reasoning_effort
+        if self.json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        resp = self._client.chat.completions.create(**kwargs)
+        u = resp.usage
+        self.last_usage = {
+            "input_tokens": u.prompt_tokens,
+            "output_tokens": u.completion_tokens,
+            "reasoning_tokens": getattr(u.completion_tokens_details, "reasoning_tokens", 0) or 0,
+        }
+        return resp.choices[0].message.content or ""
 
 
 def _extract_json(text: str) -> dict:

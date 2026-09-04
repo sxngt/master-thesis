@@ -24,6 +24,11 @@ def main() -> None:
     p.add_argument("--robot", required=True)
     p.add_argument("--terrain", required=True)
     p.add_argument("--reward", default="traditional")
+    p.add_argument(
+        "--coach",
+        default=None,
+        help="reward scheduler config (configs/coach/): llm|random|hillclimb (default: none)",
+    )
     p.add_argument("--experiment", default=None)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--config", default=None, help="unused convenience alias for --experiment path")
@@ -57,6 +62,7 @@ def main() -> None:
         robot=args.robot,
         terrain=args.terrain,
         reward=args.reward,
+        coach=args.coach,
         experiment=args.experiment,
         overrides=overrides,
     )

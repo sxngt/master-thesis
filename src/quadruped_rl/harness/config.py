@@ -1,7 +1,7 @@
 """Hierarchical YAML config composition.
 
 Composition order (later overrides earlier, deep-merged):
-    default <- sim <- algorithm <- robot <- terrain <- reward <- experiment <- CLI
+    default <- sim <- algorithm <- robot <- terrain <- reward <- coach <- experiment <- CLI
 
 The `sim` group selects the simulation backend — a first-class experiment
 axis: the same algorithms are trained in Isaac Gym and cross-validated in
@@ -52,6 +52,7 @@ def compose_config(
     robot: str | None = None,
     terrain: str | None = None,
     reward: str | None = None,
+    coach: str | None = None,
     experiment: str | None = None,
     overrides: dict[str, Any] | None = None,
     config_root: str | Path = CONFIG_ROOT,
@@ -64,6 +65,7 @@ def compose_config(
         ("robot", robot),
         ("terrain", terrain),
         ("reward", reward),
+        ("coach", coach),
         ("experiment", experiment),
     ]:
         if name:

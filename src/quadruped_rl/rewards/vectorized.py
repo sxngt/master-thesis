@@ -83,7 +83,13 @@ _COMPONENTS = {
 
 
 class VectorizedTraditionalReward:
-    """Batched equivalent of rewards.traditional.TraditionalReward."""
+    """Batched equivalent of rewards.traditional.TraditionalReward.
+
+    Parameters (weights and per-component params) are mutable at runtime via
+    set_params() so a reward scheduler (llm_feedback/coach.py) can reshape the
+    reward mid-training. Per-component running sums are accumulated on-device
+    (no host sync) and harvested with pop_stats() for the coach report.
+    """
 
     def __init__(self, reward_cfg: dict[str, Any]):
         self.components: list[tuple[str, float, dict]] = []
@@ -92,7 +98,45 @@ class VectorizedTraditionalReward:
             weight = params.pop("weight")
             if name not in _COMPONENTS:
                 raise KeyError(f"No vectorized implementation for component '{name}'")
-            self.components.append((name, weight, params))
+            self.components.append((name, float(weight), params))
+        self._sums: dict[str, torch.Tensor] = {}
+        self._count = 0
+
+    # ------------------------------------------------------------ params
+    def get_params(self) -> dict[str, float]:
+        """Flat view: {'energy.weight': -2.5e-5, 'feet_air_time.target_s': 0.5, ...}."""
+        flat: dict[str, float] = {}
+        for name, weight, params in self.components:
+            flat[f"{name}.weight"] = weight
+            for k, v in params.items():
+                flat[f"{name}.{k}"] = float(v)
+        return flat
+
+    def set_params(self, updates: dict[str, float]) -> None:
+        """Apply flat-key updates in place; unknown keys raise KeyError."""
+        index = {name: i for i, (name, _, _) in enumerate(self.components)}
+        for key, value in updates.items():
+            comp, _, field = key.partition(".")
+            if comp not in index or not field:
+                raise KeyError(f"Unknown reward parameter '{key}'")
+            name, weight, params = self.components[index[comp]]
+            if field == "weight":
+                self.components[index[comp]] = (name, float(value), params)
+            elif field in params:
+                params[field] = float(value)
+            else:
+                raise KeyError(f"Unknown reward parameter '{key}'")
+
+    # ------------------------------------------------------------- stats
+    def pop_stats(self) -> dict[str, float]:
+        """Mean per-step contribution of each weighted component since the
+        last call (plus 'total'). Empty dict if nothing was accumulated."""
+        if self._count == 0:
+            return {}
+        out = {k: float(v) / self._count for k, v in self._sums.items()}
+        out["total"] = sum(out.values())
+        self._sums, self._count = {}, 0
+        return out
 
     def __call__(
         self, state: dict[str, torch.Tensor]
@@ -103,5 +147,8 @@ class VectorizedTraditionalReward:
             value = weight * _COMPONENTS[name](state, **params)
             breakdown[name] = value
             total = value if total is None else total + value
+            s = value.detach().sum()
+            self._sums[name] = s if name not in self._sums else self._sums[name] + s
         assert total is not None
+        self._count += int(total.shape[0])
         return total, breakdown

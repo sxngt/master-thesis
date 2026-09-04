@@ -60,3 +60,23 @@ docker compose -f docker/docker-compose.yml build
    - 멀티 GPU가 생기면 `--parallel 4 --gpus 0,1,2,3`으로 그대로 확장(≈ ÷GPU 수)
 3. 특히 off-policy(SAC/TD3) 구간이 배치 시간의 대부분을 차지하므로
    off-policy 잡끼리 병렬 배치하는 것이 효과가 가장 큼 (~1.4-1.6x).
+
+## 원격 서버 dongbeen (4×RTX 4090, Tailscale)
+- 접속: `ssh -p 12888 sxngt@100.104.103.77` (Tailscale IP). 공유 호스트,
+  sudo 필요 시 비밀번호. Ubuntu 20.04 / driver 550 / 188 GB RAM / `/mnt/sdb1` 644 GB.
+- 서버의 기존 환경을 그대로 사용 (재설치 없음):
+  `/mnt/sdb1/sxngt/isaac-sim-4.5.0/python.sh` (Python 3.10, Isaac Lab 2.1.1 설치됨).
+  `~/.bashrc`가 `env.sh`를 소싱해 `OMNI_KIT_ACCEPT_EULA`, `XDG_CACHE_HOME`을 설정한다.
+  Isaac Lab 2.1.1과 로컬 5.1은 백엔드가 쓰는 API가 동일 (RenderCfg 제외, 서버 미사용).
+- 1회 설정 (로컬): `ssh-copy-id -i ~/.ssh/id_ed25519 -p 12888 sxngt@100.104.103.77`
+  (비대화식 rsync/ssh용. 키는 `~/.ssh/id_ed25519`).
+- 동기화 + 실행:
+  ```bash
+  scripts/remote_sync.sh                                        # rsync (data/, .git 제외; .env는 별도 600)
+  scripts/remote_sync.sh --launch data/results/coach_batch/jobs.txt   # 4 GPU × 2런 병렬
+  ```
+  잡 파일의 인터프리터는 `$ISAAC_PY`로 결정되므로 로컬(env_isaaclab)과 서버
+  (Isaac 4.5 python.sh)에서 같은 jobs.txt를 쓴다. 상태: `<jobs>.status.json`,
+  드라이버 로그: `<jobs>.driver.log`.
+- Isaac python에 추가로 필요한 패키지: `pydantic openai python-dotenv pyyaml`
+  (`python.sh -m pip install …`, 최초 1회).

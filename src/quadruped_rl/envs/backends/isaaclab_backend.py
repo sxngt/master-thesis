@@ -277,6 +277,28 @@ def _build_env_cfg(cfg: dict[str, Any], num_joints: int):
     return env_cfg
 
 
+def _diagonal_pairs(feet_names: list[str]) -> list[tuple[int, int]]:
+    """Index pairs of diagonal feet (FL-RR, FR-RL) from body names.
+
+    Supports Unitree (FL_foot/RR_foot) and ANYmal (LF_FOOT/RH_FOOT) naming;
+    returns [] when the pattern is unknown so the trot descriptor is skipped.
+    """
+    tags = {}
+    for i, name in enumerate(feet_names):
+        u = name.upper()
+        for key, aliases in {
+            "FL": ("FL", "LF"),
+            "FR": ("FR", "RF"),
+            "RL": ("RL", "LH", "HL"),
+            "RR": ("RR", "RH", "HR"),
+        }.items():
+            if any(u.startswith(a) for a in aliases):
+                tags[key] = i
+    if len(tags) != 4:
+        return []
+    return [(tags["FL"], tags["RR"]), (tags["FR"], tags["RL"])]
+
+
 def _make_quadruped_env_class():
     """Define the DirectRLEnv subclass (deferred: needs a running app)."""
     import isaaclab.sim as sim_utils
@@ -314,8 +336,10 @@ def _make_quadruped_env_class():
             self._fallen = torch.zeros(n, dtype=torch.bool, device=dev)
             meta = self.cfg.robot_meta
             self._base_id, _ = self._contact_sensor.find_bodies(meta["base"])
-            self._feet_ids, _ = self._contact_sensor.find_bodies(meta["feet"])
+            self._feet_ids, feet_names = self._contact_sensor.find_bodies(meta["feet"])
             self._feet_body_ids, _ = self._robot.find_bodies(meta["feet"])
+            self._diag_pairs = _diagonal_pairs(feet_names)
+            self._reset_stats()
 
         # ----------------------------------------------------------- scene
         def _setup_scene(self):
@@ -417,12 +441,91 @@ def _make_quadruped_env_class():
             }
 
         def _get_rewards(self) -> torch.Tensor:
-            total, _ = self._reward_fn(self._reward_state())
+            state = self._reward_state()
+            total, _ = self._reward_fn(state)
             # KPI snapshot BEFORE DirectRLEnv resets done envs inside step():
             # without this, terminal-step positions/falls read post-reset
             # state (teleported to origin), zeroing every episode metric.
             self._kpi_snapshot = self._compute_kpi()
+            self._accumulate_stats(state)
             return total
+
+        # ------------------------------------ training stats (coach report)
+        def _reset_stats(self) -> None:
+            dev = self.device
+            z = lambda: torch.zeros((), device=dev)  # noqa: E731
+            self._st = {
+                "steps": 0,
+                "contact": z(),  # sum of feet-in-contact fraction
+                "diag_sync": z(),  # diagonal pair contact agreement
+                "swing_h": z(),
+                "swing_n": z(),
+                "air_t": z(),
+                "air_n": z(),
+                "roll2": z(),
+                "pitch2": z(),
+                "base_h": z(),
+                "v_x": z(),
+                "v_y": z(),
+                "yaw_rate": z(),
+                "falls": z(),
+                "timeouts": z(),
+                "slip": z(),
+            }
+
+        def _accumulate_stats(self, state: dict[str, torch.Tensor]) -> None:
+            st, data = self._st, self._robot.data
+            contact = self._contact_sensor.data.net_forces_w[:, self._feet_ids].norm(dim=-1) > 1.0
+            st["steps"] += 1
+            st["contact"] += contact.float().mean()
+            if self._diag_pairs:
+                agree = torch.stack(
+                    [(contact[:, a] == contact[:, b]).float() for a, b in self._diag_pairs], dim=-1
+                )
+                st["diag_sync"] += agree.mean()
+            feet_z = data.body_pos_w[:, self._feet_body_ids, 2]
+            ground = feet_z.min(dim=-1, keepdim=True).values  # lowest foot ~ local ground
+            swing = ~contact
+            st["swing_h"] += ((feet_z - ground) * swing.float()).sum()
+            st["swing_n"] += swing.float().sum()
+            fc = state["feet_first_contact"]
+            st["air_t"] += (state["feet_last_air_time"] * fc).sum()
+            st["air_n"] += fc.sum()
+            st["roll2"] += self._rpy[:, 0].square().mean()
+            st["pitch2"] += self._rpy[:, 1].square().mean()
+            st["base_h"] += (data.root_pos_w[:, 2] - ground[:, 0]).mean()
+            st["v_x"] += state["forward_velocity_ms"].mean()
+            st["v_y"] += state["lateral_velocity_ms"].abs().mean()
+            st["yaw_rate"] += state["yaw_rate_rads"].abs().mean()
+            st["slip"] += state["foot_slip_velocity"].mean()
+            st["falls"] += self._fallen.float().sum()
+            st["timeouts"] += (self.episode_length_buf >= self.max_episode_length - 1).float().sum()
+
+        def training_stats(self) -> dict[str, float]:
+            st = self._st
+            n = st["steps"]
+            if n == 0:
+                return {}
+            f = lambda k: float(st[k]) / n  # noqa: E731
+            episodes = float(st["falls"]) + float(st["timeouts"])
+            out = {
+                "gait/duty_factor": f("contact"),
+                "gait/diagonal_sync": f("diag_sync"),
+                "gait/swing_height_m": float(st["swing_h"]) / max(float(st["swing_n"]), 1.0),
+                "gait/air_time_s": float(st["air_t"]) / max(float(st["air_n"]), 1.0),
+                "gait/base_height_m": f("base_h"),
+                "attitude/roll_rms": f("roll2") ** 0.5,
+                "attitude/pitch_rms": f("pitch2") ** 0.5,
+                "motion/forward_velocity": f("v_x"),
+                "motion/lateral_speed": f("v_y"),
+                "motion/yaw_rate": f("yaw_rate"),
+                "motion/foot_slip": f("slip"),
+                "episode/fall_fraction": float(st["falls"]) / max(episodes, 1.0),
+                "episode/count": episodes,
+            }
+            out.update({f"reward/{k}": v for k, v in self._reward_fn.pop_stats().items()})
+            self._reset_stats()
+            return out
 
         # ----------------------------------------------------------- dones
         def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -540,6 +643,16 @@ class IsaacLabEnv(VectorEnv):
     def render(self):
         """RGB frame [H, W, 3] of the chase camera (requires sim.render)."""
         return self._env.render()
+
+    # ---- reward-scheduler hooks (VectorEnv contract) ----
+    def reward_params(self) -> dict[str, float]:
+        return self._env._reward_fn.get_params()
+
+    def set_reward_params(self, updates: dict[str, float]) -> None:
+        self._env._reward_fn.set_params(updates)
+
+    def training_stats(self) -> dict[str, float]:
+        return self._env.training_stats()
 
     def close(self) -> None:
         self._env.close()

@@ -80,6 +80,31 @@ class MockVectorEnv(VectorEnv):
         self.goal_distance_m = 5.0
         self._pos = torch.zeros(self.num_envs, 3)
         self._t = torch.zeros(self.num_envs, dtype=torch.long)
+        # tunable reward params (coach hooks); drive_gain scales progress so a
+        # scheduler's change is observable in the KPIs
+        self._params = {"drive.weight": 1.0, "action_cost.weight": 0.01}
+        self._stat_steps = 0
+        self._stat_reward = 0.0
+
+    def reward_params(self) -> dict[str, float]:
+        return dict(self._params)
+
+    def set_reward_params(self, updates: dict[str, float]) -> None:
+        for k, v in updates.items():
+            if k not in self._params:
+                raise KeyError(k)
+            self._params[k] = float(v)
+
+    def training_stats(self) -> dict[str, float]:
+        if self._stat_steps == 0:
+            return {}
+        out = {
+            "reward/total": self._stat_reward / self._stat_steps,
+            "gait/duty_factor": 0.6,
+            "gait/diagonal_sync": 0.9,
+        }
+        self._stat_steps, self._stat_reward = 0, 0.0
+        return out
 
     @property
     def observation_dim(self) -> int:
@@ -105,9 +130,11 @@ class MockVectorEnv(VectorEnv):
         torch = self.torch
         actions = actions.detach().cpu()
         self._t += 1
-        drive = torch.tanh(actions.mean(dim=-1))
+        drive = torch.tanh(actions.mean(dim=-1)) * self._params["drive.weight"]
         self._pos[:, 0] += drive.clamp(min=0.0) * self.control_dt
-        rewards = drive - 0.01 * actions.square().mean(dim=-1)
+        rewards = drive - self._params["action_cost.weight"] * actions.square().mean(dim=-1)
+        self._stat_steps += 1
+        self._stat_reward += float(rewards.mean())
         reached = self._pos[:, 0] >= self.goal_distance_m
         dones = (self._t >= self.max_steps) | reached
         n = self.num_envs

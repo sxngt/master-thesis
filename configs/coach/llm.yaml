@@ -1,0 +1,56 @@
+# LLM-guided reward coach (llm_feedback/coach.py). Composed after reward/*.
+# Outer loop: every interval_steps (aligned to run.eval_interval_steps) the
+# coach reads KPIs + component contributions + gait descriptors and proposes
+# bounded parameter changes; rollback restores policy+params if J drops.
+coach:
+  strategy: llm                     # llm | random | hillclimb | none
+  interval_steps: 2_000_000         # must be a multiple of run.eval_interval_steps
+  warmup_steps: 2_000_000           # first intervention after this many steps
+  max_params: 3                     # per intervention
+  max_rel_change: 0.3               # linear params: +-30% of |current| (or of range if 0)
+  max_log_factor: 3.0               # log-scale params: x/÷3 per intervention
+  rollback_tolerance: 0.05          # J drop beyond this -> rollback
+  cooldown_after_rollback: 1        # skip this many intervention slots after a rollback
+  objective:                        # J = sum w_m * KPI_m  (deterministic eval)
+    success_rate: 1.0               # falls are not a term: early-training fall
+    mean_forward_velocity_ms: 0.5   # counts swing by +-10/min and would trigger
+                                    # spurious rollbacks; they already lower both
+  eval_note: "20 episodes, 5 m course, 20 s limit"
+  llm:
+    provider: openai
+    model: gpt-5.4-2026-03-05
+    reasoning_effort: medium
+    max_tokens: 4000
+  # Tunable subset of reward parameters. Bounds never straddle zero (sign lock).
+  # forward_velocity.target_ms is deliberately NOT tunable (it defines the task).
+  params:
+    energy.weight:           { low: -5.0e-3, high: -1.0e-6, scale: log,
+                               description: "-(sum tau^2); walking sum tau^2 ~ 2000" }
+    stability.weight:        { low: -3.0, high: -0.05,
+                               description: "-(roll^2 + pitch^2)" }
+    foot_slip.weight:        { low: -1.0, high: -0.01,
+                               description: "-(sum tangential foot speed^2 while in contact)" }
+    joint_limit.weight:      { low: -1.0, high: -0.02,
+                               description: "-(soft joint limit violation)" }
+    action_rate.weight:      { low: -0.1, high: -0.001, scale: log,
+                               description: "-(sum (a_t - a_{t-1})^2)" }
+    feet_air_time.weight:    { low: 0.0, high: 3.0,
+                               description: "+sum (air_time - target_s) at touchdown; gait prior" }
+    feet_air_time.target_s:  { low: 0.2, high: 0.8,
+                               description: "desired swing duration [s]" }
+    lateral_velocity.weight: { low: -3.0, high: -0.05, description: "-(v_y^2)" }
+    yaw_rate.weight:         { low: -2.0, high: -0.05, description: "-(yaw_rate^2)" }
+    alive_bonus.weight:      { low: 0.0, high: 0.5, description: "+1 per step alive" }
+    termination.weight:      { low: -30.0, high: -1.0, description: "one-off fall penalty" }
+  component_docs:
+    forward_velocity: "exp(-4 (v_x - target)^2), target 1.0 m/s (fixed, defines the task)"
+    energy: "sum of squared joint torques"
+    stability: "roll^2 + pitch^2 of the base"
+    foot_slip: "squared tangential foot velocity while in contact"
+    joint_limit: "soft joint-limit violation"
+    action_rate: "squared change of action between steps"
+    feet_air_time: "(swing duration - target_s) summed at touchdown, only when commanded to move"
+    lateral_velocity: "v_y^2"
+    yaw_rate: "yaw_rate^2"
+    alive_bonus: "1 per step while not fallen"
+    termination: "1 on the fall step"

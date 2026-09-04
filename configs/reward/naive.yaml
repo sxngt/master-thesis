@@ -1,0 +1,19 @@
+# Setting A for the reward-coach study: the first hand-designed reward of this
+# project (state before the 2026-09-01 fixes, see docs/findings.md). PPO with
+# this reward learns to stand still: the energy penalty dominates the velocity
+# term and there is no gait prior / heading penalty. Every component of
+# traditional.yaml is present (some at weight 0) so a coach can re-enable it.
+reward:
+  name: naive
+  components:
+    forward_velocity: { weight: 1.0, target_ms: 1.0 }
+    energy: { weight: -2.0e-3 }          # 80x too strong -> standing is optimal
+    stability: { weight: -0.5 }
+    foot_slip: { weight: -0.1 }
+    joint_limit: { weight: -0.2 }
+    action_rate: { weight: -0.01 }
+    feet_air_time: { weight: 0.0, target_s: 0.5 }   # gait prior disabled
+    lateral_velocity: { weight: 0.0 }    # no heading penalties
+    yaw_rate: { weight: 0.0 }
+    alive_bonus: { weight: 0.1 }
+    termination: { weight: -10.0 }

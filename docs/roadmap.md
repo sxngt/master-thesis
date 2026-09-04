@@ -13,6 +13,12 @@
 - 메트릭 4개 그룹 + 통계 분석(ANOVA/Tukey/Cohen's d) + 플롯
 - 지형 12종 생성기 + 커리큘럼, mock 시뮬레이터 백엔드
 - LLM 피드백 파이프라인(스키마/변환/수집/선호도 모델) + 보상 오염 가드
+- **LLM 보상 코치 (Phase 3 파일럿, 2026-09-04)**: `llm_feedback/coach.py` —
+  평가 주기마다 관측 리포트(KPI + 보행 기술자 + 보상 기여도) → 스케줄러
+  (llm | random | hillclimb) → 가드레일(부호 고정, 선형 ±30 % / 로그 ×÷3,
+  최대 3개) → `env.set_reward_params` + 정책 스냅샷 → 목적함수 J 하락 시 롤백.
+  `configs/coach/*.yaml`, `--coach`, `scripts/make_coach_jobs.py`(36 잡),
+  원격 실행 `scripts/remote_sync.sh`(docs/setup.md). Isaac Lab 실기 스모크 통과
 - 테스트 스위트 (시뮬레이터 불필요)
 
 ## Phase 1 완료 전 구현 필요 (우선순위순)

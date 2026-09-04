@@ -27,7 +27,8 @@ configs/               # YAML 설정 (계층적 합성: default + algorithm/robo
   algorithm/           # ppo, trpo, a3c, sac, td3, ddpg — 알고리즘별 하이퍼파라미터 + 탐색 공간
   robot/               # a1, anymal_c, mini_cheetah — 물리/센서/액션 스펙
   terrain/             # 12개 험지 시나리오 × 3단계 난이도
-  reward/              # traditional(수치적), hybrid_llm(LLM 통합)
+  reward/              # traditional(수치적), naive(코치 복구 실험용), hybrid_llm(LLM 통합)
+  coach/               # 보상 코치: llm / random / hillclimb (Phase 3 파일럿)
   experiment/          # phase1_baseline ~ phase4_hardware 실험 정의
 src/quadruped_rl/      # 메인 패키지 (uv sync로 editable 설치)
   envs/                # BaseEnv 계약, 지형 생성, 커리큘럼
@@ -61,6 +62,7 @@ PYTHONPATH=src ~/anaconda3/envs/env_isaaclab/bin/python scripts/train.py \
     --sim isaaclab --algorithm ppo --robot a1 --terrain stairs --seed 0
 uv run python scripts/run_matrix.py --experiment phase2_matrix   # 전체 매트릭스 (재개 지원)
 python3 scripts/run_jobs.py --jobs jobs.txt --parallel 2         # 4080: 2런 동시 실행이 최적 (docs/setup.md)
+scripts/remote_sync.sh --launch data/results/coach_batch/jobs.txt  # 4x4090 서버 dongbeen (docs/setup.md)
 uv run python scripts/cross_validate.py \
     --checkpoint data/results/<run_id>/checkpoints/best.pt \
     --sims isaaclab pybullet gazebo                              # 시뮬레이터 교차 검증
@@ -86,7 +88,11 @@ uv run python scripts/analyze.py --experiment phase2_matrix \
 ### 설정 시스템
 - 모든 실험 파라미터는 YAML로. 코드에 하이퍼파라미터 하드코딩 금지.
 - 합성 순서: `default.yaml` ← **sim** ← algorithm ← robot ← terrain ← reward
-  ← experiment ← CLI 오버라이드 (뒤가 우선). 로더는 `harness/config.py`.
+  ← coach ← experiment ← CLI 오버라이드 (뒤가 우선). 로더는 `harness/config.py`.
+- `configs/coach/` (llm | random | hillclimb): 학습 중 보상 파라미터를 동적으로
+  조정하는 보상 코치(`llm_feedback/coach.py`). `--coach`로 활성화. 조정 가능한
+  파라미터·범위·가드레일·목적함수 J가 모두 YAML에 있고, 모든 개입은
+  `<run_dir>/coach_log.jsonl`에 프롬프트/응답 원문까지 기록된다.
 
 ### 시뮬레이터 백엔드 (이 연구의 구조적 핵심)
 - 모든 백엔드는 `envs/base_env.py::BaseEnv` 계약(observation_dim, action_dim,
@@ -131,7 +137,9 @@ uv run python scripts/analyze.py --experiment phase2_matrix \
 ## Claude 작업 지침
 
 - **시뮬레이터 의존 코드 주의**: 이 머신에는 Isaac Lab이 `env_isaaclab`
-  (conda, Python 3.11)에 설치돼 있음. isaaclab 의존 코드의 실기 검증은
+  (conda, Python 3.11)에 설치돼 있음. 대규모 배치는 원격 서버 dongbeen
+  (4×4090, Isaac Sim 4.5 / Isaac Lab 2.1.1 — 서버의 기존 환경 사용, 재설치 금지;
+  docs/setup.md)에서 실행. isaaclab 의존 코드의 실기 검증은
   `PYTHONPATH=src ~/anaconda3/envs/env_isaaclab/bin/python`으로 실행 (docs/setup.md의
   스모크 명령 참조). 순수 로직은 uv 환경의 `tests/`로 검증.
 - **실험 실행은 사용자 확인 후**: 학습 실행은 수 시간~수 일 소요. 임의로

@@ -51,3 +51,24 @@ class PreferencePair(BaseModel):
     trajectory_b: str
     preferred: Literal["a", "b", "equal"]
     source: Literal["human", "llm"]
+
+
+class CoachAction(BaseModel):
+    """One reward-parameter change proposed by the LLM coach."""
+
+    param: str = Field(description="flat key, e.g. 'energy.weight'")
+    value: float
+    rationale: str = ""
+
+
+class CoachOutput(BaseModel):
+    """Validated LLM coach response (llm_feedback/coach.py).
+
+    Bounds, sign locks and step-size limits are enforced afterwards by the
+    ParamSpace guardrail — schema validation only guarantees structure.
+    """
+
+    diagnosis: str
+    actions: list[CoachAction] = Field(default_factory=list)
+    expected_effect: str = ""
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)

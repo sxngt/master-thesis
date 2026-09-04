@@ -74,3 +74,18 @@ class VectorEnv(ABC):
     @abstractmethod
     def step(self, actions):
         """actions [N, act_dim] -> (obs [N, obs_dim], rewards [N], dones [N], info)."""
+
+    # ---- optional reward-scheduler hooks (llm_feedback/coach.py) ----------
+    # Backends whose reward is a VectorizedTraditionalReward expose its
+    # parameters so a scheduler can reshape the reward mid-training, and
+    # accumulate cheap on-device training statistics for the coach report.
+    def reward_params(self) -> dict[str, float]:
+        return {}
+
+    def set_reward_params(self, updates: dict[str, float]) -> None:
+        raise NotImplementedError(f"{type(self).__name__} has no tunable reward")
+
+    def training_stats(self) -> dict[str, float]:
+        """Harvest-and-reset statistics accumulated since the last call
+        (reward component contributions, gait descriptors, terminations)."""
+        return {}

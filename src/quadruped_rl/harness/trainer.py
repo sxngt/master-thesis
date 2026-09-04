@@ -17,6 +17,7 @@ from quadruped_rl.harness.config import save_resolved_config
 from quadruped_rl.harness.evaluator import Evaluator
 from quadruped_rl.harness.logging_utils import RunLogger
 from quadruped_rl.harness.seeding import set_global_seed
+from quadruped_rl.llm_feedback.coach import RewardCoach
 from quadruped_rl.registry import get_algorithm, get_env_backend
 
 DATA_ROOT = Path(__file__).resolve().parents[3] / "data"
@@ -28,7 +29,14 @@ def make_run_id(cfg: dict[str, Any]) -> str:
     terrain = cfg["terrain"]["name"]
     seed = cfg["run"]["seed"]
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    return f"{algo}_{robot}_{terrain}_s{seed}_{stamp}_{uuid.uuid4().hex[:6]}"
+    tags = ""
+    reward = cfg.get("reward", {}).get("name", "traditional")
+    if reward != "traditional":
+        tags += f"_rw-{reward}"
+    coach = cfg.get("coach", {}).get("strategy", "none")
+    if coach != "none":
+        tags += f"_coach-{coach}"
+    return f"{algo}_{robot}_{terrain}{tags}_s{seed}_{stamp}_{uuid.uuid4().hex[:6]}"
 
 
 class Trainer:
@@ -51,6 +59,10 @@ class Trainer:
         self.logger = RunLogger(self.run_dir, cfg, self.run_id)
         self.checkpoints = CheckpointManager(self.run_dir)
         self.evaluator = Evaluator(cfg, self.env)
+        # optional outer-loop reward scheduler (configs/coach/*.yaml)
+        self.coach = RewardCoach(
+            cfg.get("coach", {}), self.env, self.algorithm, self.run_dir, seed=cfg["run"]["seed"]
+        )
 
     def _apply_smoke_overrides(self) -> None:
         """~1-minute CPU-safe sanity run. Never used for reported results."""
@@ -73,14 +85,21 @@ class Trainer:
         last_eval: dict[str, Any] = {}
 
         obs = self.env.reset()
+        window: list[dict[str, float]] = []  # train metrics since the last eval
         while step < total:
             obs, train_metrics, collected = self.algorithm.collect_and_update(self.env, obs)
             step += collected
+            window.append(train_metrics)
             self.logger.log({f"train/{k}": v for k, v in train_metrics.items()}, step)
 
             if step >= next_eval:
                 last_eval = self.evaluator.run(self.algorithm)
                 self.logger.log({f"eval/{k}": v for k, v in last_eval.items()}, step)
+                coach_metrics = self.coach.on_eval(step, total, last_eval, window)
+                if coach_metrics:
+                    self.logger.log({f"coach/{k}": v for k, v in coach_metrics.items()}, step)
+                    obs = self.env.reset()  # policy/reward may have changed: fresh episodes
+                window = []
                 next_eval += cfg_run["eval_interval_steps"]
 
             if step >= next_ckpt:
