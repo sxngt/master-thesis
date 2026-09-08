@@ -8,6 +8,7 @@ run:
   eval_episodes: 20
   checkpoint_interval_steps: 5_000_000
   smoke_test: false            # if true: tiny env count / few steps, CPU-safe
+  results_root: null           # run dir parent (default data/results); batches set their own
 
 sim:
   backend: isaaclab            # isaaclab | pybullet | gazebo | mock | mock_vec

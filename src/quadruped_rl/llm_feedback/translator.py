@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,13 @@ class LLMClient:
     `reasoning_effort` is forwarded to OpenAI reasoning models (gpt-5.x / o-series);
     for those the sampling temperature is fixed by the API, so determinism is
     approximated by prompt caching + full prompt/response logging instead.
+
+    `base_url` points the openai provider at any OpenAI-compatible server
+    (ollama ``http://host:11434/v1``, vLLM ``http://host:8000/v1``): the key is
+    then read from `api_key_env` if set, else a placeholder (local servers
+    ignore it), and `max_tokens` is sent instead of `max_completion_tokens`
+    (both servers accept the former). Thinking models may echo their reasoning
+    inside ``<think>...</think>`` — it is stripped from the returned text.
     """
 
     def __init__(
@@ -49,12 +57,16 @@ class LLMClient:
         model: str = "claude-sonnet-5",
         reasoning_effort: str | None = None,
         json_mode: bool = False,
+        base_url: str | None = None,
+        api_key_env: str | None = None,
+        timeout_s: float | None = None,
     ):
         _load_dotenv()
         self.provider = provider
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.json_mode = json_mode
+        self.base_url = base_url
         self.last_usage: dict[str, int] = {}
         if provider == "anthropic":
             import anthropic
@@ -63,7 +75,15 @@ class LLMClient:
         elif provider == "openai":
             import openai
 
-            self._client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+            if base_url:
+                key = os.environ.get(api_key_env or "", "") if api_key_env else ""
+                self._client = openai.OpenAI(
+                    api_key=key or "local", base_url=base_url, timeout=timeout_s or 600.0
+                )
+            else:
+                self._client = openai.OpenAI(
+                    api_key=os.environ[api_key_env or "OPENAI_API_KEY"], timeout=timeout_s
+                )
         else:
             raise ValueError(f"Unknown provider '{provider}'")
 
@@ -82,7 +102,7 @@ class LLMClient:
             return resp.content[0].text
         kwargs: dict[str, Any] = {
             "model": self.model,
-            "max_completion_tokens": max_tokens,
+            ("max_tokens" if self.base_url else "max_completion_tokens"): max_tokens,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -95,11 +115,20 @@ class LLMClient:
         resp = self._client.chat.completions.create(**kwargs)
         u = resp.usage
         self.last_usage = {
-            "input_tokens": u.prompt_tokens,
-            "output_tokens": u.completion_tokens,
-            "reasoning_tokens": getattr(u.completion_tokens_details, "reasoning_tokens", 0) or 0,
+            "input_tokens": getattr(u, "prompt_tokens", 0) or 0,
+            "output_tokens": getattr(u, "completion_tokens", 0) or 0,
+            "reasoning_tokens": getattr(
+                getattr(u, "completion_tokens_details", None), "reasoning_tokens", 0
+            )
+            or 0,
         }
-        return resp.choices[0].message.content or ""
+        return strip_thinking(resp.choices[0].message.content or "")
+
+
+def strip_thinking(text: str) -> str:
+    """Drop ``<think>...</think>`` blocks (open-weight thinking models echo them
+    in the content when the server does not separate reasoning)."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
 def _extract_json(text: str) -> dict:

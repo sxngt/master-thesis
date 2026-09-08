@@ -1,0 +1,2 @@
+# Decision-layer overrides of coach version v5 (none: v5 is the preset in configs/coach/llm.yaml).
+coach: {}

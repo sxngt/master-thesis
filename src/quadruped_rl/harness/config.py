@@ -72,7 +72,26 @@ def compose_config(
             cfg = deep_merge(cfg, load_yaml(root / group / f"{name}.yaml"))
     if overrides:
         cfg = deep_merge(cfg, overrides)
+    cfg = _merge_coach_version(cfg, root, overrides)
     return _resolve_inherits(cfg, root)
+
+
+def _merge_coach_version(cfg: dict, root: Path, overrides: dict | None) -> dict:
+    """``coach.version_dir`` (a coach *version* produced by the evolution loop,
+    configs/coach/versions/<v>/) may carry ``coach.yaml`` with decision-layer
+    overrides; they are merged over the coach preset, and explicit CLI
+    overrides are re-applied on top so the command line always wins."""
+    vdir = (cfg.get("coach") or {}).get("version_dir")
+    if not vdir:
+        return cfg
+    d = Path(vdir) if Path(vdir).is_absolute() else root.parent / vdir
+    f = d / "coach.yaml"
+    if f.exists():
+        extra = load_yaml(f) or {}
+        cfg = deep_merge(cfg, extra if "coach" in extra else {"coach": extra})
+        if overrides:
+            cfg = deep_merge(cfg, overrides)
+    return cfg
 
 
 def save_resolved_config(cfg: dict[str, Any], run_dir: str | Path) -> Path:

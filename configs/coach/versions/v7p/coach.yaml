@@ -1,0 +1,7 @@
+# Decision-layer overrides of coach version v7p (hand-written, 2026-09-08).
+coach:
+  playbook:
+    enabled: true      # <root>/playbook.json, rebuilt by scripts/evolve_coach.py before every batch
+  settled_reports: 2   # curriculum ledger read 2 reports after each move (the immediate row is biased negative)
+  ledger_veto_obs: 3   # drop a reward-weight move the in-run ledger scores negative over >=3 obs (v6 stairs s1)
+  curriculum_lock: true # never lower a curriculum lever in the release phase (v7's rule, enforced; v6 stairs s0 34M)

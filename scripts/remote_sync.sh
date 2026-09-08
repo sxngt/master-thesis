@@ -17,8 +17,11 @@ REMOTE_ROOT=${REMOTE_ROOT:-/mnt/sdb1/sxngt/workspace/master-thesis}
 REMOTE_PY=${REMOTE_PY:-/mnt/sdb1/sxngt/isaac-sim-4.5.0/python.sh}
 cd "$(dirname "$0")/.."
 
+# configs/coach/versions/ is written on the server by the evolve loop (v6, v7,
+# ...): never deleted here — pull them back with docs/evolve.md §6 before editing
 rsync -az --delete -e "$SSH" \
   --exclude .git --exclude .venv --exclude data --exclude docs/media \
+  --filter 'protect configs/coach/versions/*' \
   --exclude paper --exclude '__pycache__' --exclude '*.egg-info' --exclude .env \
   ./ "$HOST:$REMOTE_ROOT/"
 # API keys: copied separately so --delete never touches it; never committed

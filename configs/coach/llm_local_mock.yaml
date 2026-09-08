@@ -1,0 +1,57 @@
+# llm_local.yaml with the parameter space of the mock_vec backend: dry runs of
+# the evolve loop on a laptop (real local LLM, fake simulator, minutes). Keep the
+# decision layer identical to llm_local.yaml. Never for reported results.
+#   uv run python scripts/evolve_coach.py --sim mock_vec --coach llm_local_mock ...
+coach:
+  strategy: llm                     # llm | random | hillclimb | none
+  interval_steps: 2_000_000         # must be a multiple of run.eval_interval_steps
+  warmup_steps: 2_000_000           # first intervention after this many steps
+  async_llm: false                  # as llm_local.yaml
+  max_params: 3                     # per intervention
+  max_rel_change: 0.3               # linear params: +-30% of |current| (or of range if 0)
+  max_log_factor: 3.0               # log-scale params: x/÷3 per intervention
+  rollback_tolerance: 0.05          # J drop beyond this -> rollback
+  noise_window: 10                  # evals used to estimate the evaluation noise of J
+  noise_z: 2.0                      # effective tolerance = max(rollback_tolerance, noise_z*sqrt(2)*sigma)
+  tolerance_max: 0.3                # cap of the effective tolerance
+  best_confirm: 2                   # "best" = highest mean of this many consecutive evals
+  max_restores_per_snapshot: 1      # a best snapshot is restored at most this often
+  cooldown_after_rollback: 1        # skip this many intervention slots after a rollback
+  objective:                        # J = sum w_m * KPI_m  (deterministic eval)
+    success_rate: 1.0               # falls are not a term: early-training fall
+    mean_forward_velocity_ms: 0.5   # counts swing by +-10/min and would trigger
+                                    # spurious rollbacks; they already lower both
+  eval_note: "first episode of 256 fixed envs, 5 m course, 20 s limit"
+  kpi_command:                      # KPI -> parameter that commands it (report
+    mean_forward_velocity_ms: forward_velocity.target_ms   # states the ceiling)
+  tracking_ratio: 0.75              # measured/commanded above this = "tracks its command"
+  # ---- coach v5 decision layer (shared by llm/random/hillclimb; docs/coach_versions.md)
+  confirm_evals: 1                  # re-evaluations when a drop is ambiguous (sequential test)
+  confirm_zone: 0.5                 # ambiguous = drop in (confirm_zone*tol, tol]
+  trend_points: 4                   # evals used for the pre-intervention linear trend
+  curriculum_params: []             # mock_vec has no curriculum lever
+  release_from_progress: 0.5        # invariant active after this fraction of the budget
+  release_min_success: 0.3          # ... and only while success_rate >= this (2 reports)
+  phases: { exploit: 0.5, consolidate: 0.85 }       # fractions of the budget
+  effect_prior_sd: 0.1              # N(0, sd) prior of a move's effect on J
+  # effect_prior: { forward_velocity.target_ms: { up: [0.03, 0.05] } }  # optional, per (param, dir)
+  tracking_ratio_prior: 0.89        # measured/commanded speed, batches 3-4 (462 reports)
+  forecast_min_points: 4            # evals of a lineage before the curve fit is shown
+  llm:
+    provider: openai                 # OpenAI-compatible client
+    base_url: http://127.0.0.1:11435/v1   # scripts/llm_server.sh (ollama, GPUs 0,1,2)
+    api_key_env: LOCAL_LLM_API_KEY   # unset -> placeholder key (local servers ignore it)
+    model: qwen3.8:27b-q8_0          # dense 27B thinking model, 30 GB (2026-08); fast
+                                     # alternatives: qwen3.6:35b-a3b (MoE), gpt-oss:20b
+    reasoning_effort: null           # only gpt-oss takes low|medium|high; null = model default
+    max_tokens: 16000                # thinking + answer (thinking is stripped by the client)
+    timeout_s: 1800                  # a queued call behind 3 others must not fail
+    retries: 1
+    api_retries: 5                   # server (re)loading the model -> wait, not skip
+    api_backoff_s: 20
+  params:                           # the two knobs of envs/backends/mock.py::MockVecEnv
+    drive.weight:       { low: 0.5, high: 2.0, description: "scales forward progress (drive gain)" }
+    action_cost.weight: { low: 0.001, high: 0.05, scale: log, description: "penalty on |action|^2" }
+  component_docs:
+    drive: "forward progress per step, scaled by drive.weight"
+    action_cost: "sum of squared actions"

@@ -1,0 +1,5 @@
+# Deterministic vectorized mock backend (VectorEnv contract, coach hooks):
+# smoke tests, CI and evolve-loop dry runs only — never for reported results
+sim:
+  backend: mock_vec
+  num_envs: 4

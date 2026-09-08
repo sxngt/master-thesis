@@ -1,0 +1,3 @@
+# Decision-layer overrides of coach version v8 (evolution generation 3).
+coach:
+  max_params: 1
