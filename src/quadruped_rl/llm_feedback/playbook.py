@@ -372,6 +372,9 @@ class Playbook:
                     )
             else:
                 lines.append("  those runs left the floor without any parameter change")
+            combo = self._first_report_line(out_cases, stuck)
+            if combo:
+                lines.append(combo)
         if stuck:
             cnt = Counter()
             for c in stuck:
@@ -399,6 +402,48 @@ class Playbook:
                 )
             )
         return lines
+
+    @staticmethod
+    def _first_report_line(out_cases: list[Case], stuck: list[Case]) -> str:
+        """The combination of moves the escaped runs made at their *first*
+        report, and how often the stuck runs made the same combination at
+        theirs. Per-parameter counts hide this: the stuck runs lower the target
+        and relax energy too, only later and one at a time (evolve3 naive: the
+        joint first move escaped 3/5, no joint first move escaped 0/9)."""
+
+        def first_dirs(c: Case) -> frozenset[tuple[str, str]] | None:
+            for m in c.moves:
+                if c.breakout_step is not None and m.step > c.breakout_step:
+                    return None
+                if m.directions():
+                    return frozenset(m.directions())
+            return None
+
+        firsts = [d for c in out_cases if (d := first_dirs(c))]
+        if not firsts:
+            return ""
+        # the moves every escaped run made at its first report; if they share
+        # none, fall back to the most common first-report combination
+        combo = frozenset.intersection(*firsts)
+        if not combo:
+            combo = Counter(firsts).most_common(1)[0][0]
+        n_out = sum(1 for d in firsts if d >= combo)
+        n_stuck = sum(1 for c in stuck if (d := first_dirs(c)) and d >= combo)
+        steps_out = [c.moves[0].step for c in out_cases if c.moves]
+        steps_stuck = [c.moves[0].step for c in stuck if c.moves]
+        line = (
+            "  first-report combination in the runs that left the floor: "
+            + " + ".join(_fmt_dir(*d) for d in sorted(combo))
+            + f" together, {n_out}/{len(out_cases)} runs"
+        )
+        if stuck:
+            line += f"; {n_stuck}/{len(stuck)} of the stuck runs made that combination first"
+        if steps_out and steps_stuck:
+            line += (
+                f" (first move at {np.median(steps_out) / 1e6:.1f}M steps in the escaped runs, "
+                f"{np.median(steps_stuck) / 1e6:.1f}M in the stuck ones)"
+            )
+        return line
 
     def _ledger_lines(self, cases: list[Case], max_moves: int) -> list[str]:
         stats: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(

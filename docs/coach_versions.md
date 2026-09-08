@@ -515,3 +515,10 @@ report)"를 보고하므로 v7p naive 3런이 첫 보고에서 이 두 개를 �
 
 측정 위생: 9런 모두 api 오류 0, 파싱 실패 0. rough s1 롤백 1, s2 복원 1(§6.6의 LR 붕괴).
 KL 조기 종료는 v7 rough s2(LR 9e-4 구간)에만 집중됐고 나머지 8런은 대조군 수준(≤2.5 %).
+
+플레이북 보강(로컬 커밋, 서버 동기화는 세대 종료 후): 바닥 증거에 "첫 보고 조합" 줄을 추가했다 —
+탈출 런 전부가 첫 보고에서 같이 움직인 파라미터의 교집합과, 바닥 런 중 같은 조합으로 시작한
+비율. evolve3 플레이북(29런)에서는 `energy.weight up + forward_velocity.target_ms down together,
+17/17 runs; 4/12 of the stuck runs`(Fisher p = 1e-4). 파라미터별 집계로는 바닥 런도
+"target down 12/12, energy up 12/12"라 구분이 안 되던 것을 조합·시점으로 드러낸다.
+`tests/test_playbook.py`.

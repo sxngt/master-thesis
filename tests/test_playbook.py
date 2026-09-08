@@ -132,6 +132,10 @@ def test_evidence_on_the_floor_names_the_recipe_and_the_stuck_moves(tmp_path):
     assert "1 run(s) never left the floor" in text
     assert "moves seen only in stuck runs: action_rate.weight down" in text
     assert "first success came 4.0M steps" in text
+    assert (
+        "first-report combination in the runs that left the floor: energy.weight up + "
+        "forward_velocity.target_ms down together, 2/2 runs; 0/1 of the stuck runs" in text
+    )
     # the current run is never its own evidence
     assert "1/2 left the floor" in pb.evidence("rough-medium-naive", 0.0, exclude_run="esc0")
 
