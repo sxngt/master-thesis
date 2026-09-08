@@ -36,6 +36,9 @@ def make_run_id(cfg: dict[str, Any]) -> str:
     coach = cfg.get("coach", {}).get("strategy", "none")
     if coach != "none":
         tags += f"_coach-{coach}"
+        version = cfg["coach"].get("version_dir")
+        if version:
+            tags += f"-{Path(version).name}"
     return f"{algo}_{robot}_{terrain}{tags}_s{seed}_{stamp}_{uuid.uuid4().hex[:6]}"
 
 
@@ -46,7 +49,12 @@ class Trainer:
             self._apply_smoke_overrides()
 
         self.run_id = make_run_id(cfg)
-        self.run_dir = Path(run_dir) if run_dir else DATA_ROOT / "results" / self.run_id
+        # run.results_root: per-batch results folder (relative to the repo root)
+        root = cfg["run"].get("results_root")
+        root = (
+            (Path(root) if Path(root).is_absolute() else DATA_ROOT.parent / root) if root else None
+        )
+        self.run_dir = Path(run_dir) if run_dir else (root or DATA_ROOT / "results") / self.run_id
         save_resolved_config(cfg, self.run_dir)  # reproducibility: never skip
 
         set_global_seed(cfg["run"]["seed"])
@@ -61,7 +69,21 @@ class Trainer:
         self.evaluator = Evaluator(cfg, self.env)
         # optional outer-loop reward scheduler (configs/coach/*.yaml)
         self.coach = RewardCoach(
-            cfg.get("coach", {}), self.env, self.algorithm, self.run_dir, seed=cfg["run"]["seed"]
+            cfg.get("coach", {}),
+            self.env,
+            self.algorithm,
+            self.run_dir,
+            seed=cfg["run"]["seed"],
+            evaluate=lambda: self.evaluator.run(self.algorithm),
+            task={
+                "terrain": cfg.get("terrain", {}).get("name", "?"),
+                "level": cfg["sim"].get("terrain_level", "easy"),
+                "reward": cfg.get("reward", {}).get("name", "traditional"),
+                "course_length_m": cfg["sim"].get("course_length_m", 5.0),
+                "episode_length_s": cfg["sim"].get("episode_length_s", 20.0),
+                "num_envs": cfg["sim"].get("num_envs"),
+                "algorithm": cfg["algorithm"]["name"].upper(),
+            },
         )
 
     def _apply_smoke_overrides(self) -> None:
@@ -106,6 +128,7 @@ class Trainer:
                 self.checkpoints.save(self.algorithm, step, last_eval)
                 next_ckpt += cfg_run["checkpoint_interval_steps"]
 
+        self.coach.finish()
         final = self.evaluator.run(self.algorithm)
         self.checkpoints.save(self.algorithm, step, final)
         self.logger.log({f"final/{k}": v for k, v in final.items()}, step)

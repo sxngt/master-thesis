@@ -70,5 +70,35 @@ class CoachOutput(BaseModel):
 
     diagnosis: str
     actions: list[CoachAction] = Field(default_factory=list)
+    restore_best: bool = Field(
+        default=False,
+        description="reload the best-objective policy snapshot (and its parameters) "
+        "before applying the actions — for a collapsed policy",
+    )
     expected_effect: str = ""
+    predicted_delta_j: float | None = Field(
+        default=None,
+        description="forecast of the change in J at the next report caused by the "
+        "actions, net of the learning trend (scored for calibration)",
+    )
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class MetaOutput(BaseModel):
+    """Validated response of the coach-evolution step (llm_feedback/evolve.py).
+
+    The meta-LLM proposes the next coach *version*: full prompt templates and
+    decision-layer overrides. Placeholders, key names and ranges are checked
+    afterwards by ``evolve.validate_proposal``.
+    """
+
+    hypothesis: str
+    rationale: str = ""
+    system_md: str | None = None  # None = keep the incumbent's template
+    user_md: str | None = None
+    coach_overrides: dict[str, object] = Field(default_factory=dict)
+    expected_delta_j: float | None = None
+    code_ideas: list[str] = Field(
+        default_factory=list,
+        description="changes that need code (not applied; written to proposals.md for review)",
+    )

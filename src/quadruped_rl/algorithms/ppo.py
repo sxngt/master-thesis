@@ -204,6 +204,21 @@ class PPO(Algorithm):
                 self.kl_penalty *= 0.5
         return {"loss": float(np.mean(losses)), "approx_kl": mean_kl, "kl_penalty": self.kl_penalty}
 
+    # ------------------------------------------------ live hyperparameters
+    LIVE_HYPERPARAMS = ("learning_rate", "entropy_coef", "clip_range")
+
+    def hyperparams(self) -> dict[str, float]:
+        return {k: float(self.acfg[k]) for k in self.LIVE_HYPERPARAMS}
+
+    def set_hyperparams(self, updates: dict[str, float]) -> None:
+        for key, value in updates.items():
+            if key not in self.LIVE_HYPERPARAMS:
+                raise KeyError(f"PPO has no live hyperparameter '{key}'")
+            self.acfg[key] = float(value)
+        if "learning_rate" in updates:
+            for group in self.optimizer.param_groups:
+                group["lr"] = float(updates["learning_rate"])
+
     # ------------------------------------------------------------------- io
     def save(self, path: str | Path) -> None:
         torch.save(
@@ -212,6 +227,7 @@ class PPO(Algorithm):
                 "critic": self.critic.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
                 "kl_penalty": self.kl_penalty,
+                "hyperparams": self.hyperparams(),
             },
             path,
         )
@@ -222,3 +238,5 @@ class PPO(Algorithm):
         self.critic.load_state_dict(ckpt["critic"])
         self.optimizer.load_state_dict(ckpt["optimizer"])
         self.kl_penalty = ckpt.get("kl_penalty", self.kl_penalty)
+        if "hyperparams" in ckpt:
+            self.set_hyperparams(ckpt["hyperparams"])

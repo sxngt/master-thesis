@@ -44,6 +44,15 @@ class Algorithm(ABC):
         """Optuna search space, read from configs/algorithm/<name>.yaml."""
         return cfg.get("search_space", {})
 
+    # ---- optional live hyperparameters (llm_feedback/coach.py) -----------
+    # Algorithms that can change hyperparameters mid-training expose them as
+    # a flat dict; the coach addresses them as ``algo.<key>``.
+    def hyperparams(self) -> dict[str, float]:
+        return {}
+
+    def set_hyperparams(self, updates: dict[str, float]) -> None:
+        raise NotImplementedError(f"{type(self).__name__} has no live hyperparameters")
+
 
 class RolloutBuffer:
     """Fixed-horizon on-policy storage with GAE(lambda) advantage computation."""
