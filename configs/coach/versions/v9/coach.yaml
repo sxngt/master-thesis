@@ -1,3 +1,2 @@
-# Decision-layer overrides of coach version v9 (evolution generation 4).
-coach:
-  interval_steps: 3000000
+# Decision-layer overrides of coach version v9 (evolution generation 3).
+coach: {}

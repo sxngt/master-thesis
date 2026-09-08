@@ -26,6 +26,7 @@ import json
 import math
 import string
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -593,9 +594,12 @@ class EvolveState:
             name, {"parent": None, "generation": 0, "status": "new"}
         )
 
-    def next_name(self) -> str:
-        """v6, v7, ... after the highest existing v<N>."""
-        nums = [int(n[1:]) for n in self.data["versions"] if n[1:].isdigit()]
+    def next_name(self, taken: Iterable[str] = ()) -> str:
+        """v6, v7, ... after the highest v<N> known to the state or in ``taken``
+        (the version dirs on disk: a fresh root numbers past every dir an
+        earlier root wrote instead of overwriting it)."""
+        names = set(self.data["versions"]) | set(taken)
+        nums = [int(n[1:]) for n in names if n[1:].isdigit()]
         return f"v{max(nums, default=5) + 1}"
 
     def log(self, msg: str) -> None:

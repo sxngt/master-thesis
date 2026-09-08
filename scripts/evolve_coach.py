@@ -39,6 +39,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from collections.abc import Iterable
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -205,7 +206,7 @@ def propose(
         timeout_s=3600,
     )
     errors: list[str] = []
-    name = state.next_name()
+    name = state.next_name(p.name for p in Path(args.versions_dir).iterdir() if p.is_dir())
     for attempt in range(args.meta_retries + 1):
         system, user = meta_prompt(
             incumbent,
@@ -248,14 +249,17 @@ def propose(
     raise RuntimeError(f"meta-LLM produced no valid proposal in {args.meta_retries + 1} attempts")
 
 
-def queued_candidates(versions: Path, parent: str, state: EvolveState) -> list[tuple[str, str]]:
+def queued_candidates(
+    versions: Path, parent: str, state: EvolveState, skip: Iterable[str] = ()
+) -> list[tuple[str, str]]:
     """Hand-written version dirs (name, hypothesis) that declare ``parent:
-    <incumbent>`` in their CHANGELOG and are not in state.json yet, oldest
-    CHANGELOG first (queue order = the order the candidates were written)."""
+    <incumbent>`` in their CHANGELOG and are not in state.json (or ``skip``:
+    versions already judged in an earlier root) yet, oldest CHANGELOG first
+    (queue order = the order the candidates were written)."""
     out = []
     dirs = [p for p in versions.iterdir() if p.is_dir() and (p / "CHANGELOG.md").exists()]
     for d in sorted(dirs, key=lambda p: ((p / "CHANGELOG.md").stat().st_mtime, p.name)):
-        if d.name in state.data["versions"]:
+        if d.name in state.data["versions"] or d.name in skip:
             continue
         meta: dict[str, str] = {}
         key = None
@@ -383,6 +387,12 @@ def main() -> None:
         default=[],
         help="extra result roots (relative to the repo) indexed into <root>/playbook.json",
     )
+    p.add_argument(
+        "--skip-versions",
+        nargs="*",
+        default=[],
+        help="version dirs never taken as queued candidates (judged in an earlier root)",
+    )
     p.add_argument("--generations", type=int, default=1000)
     p.add_argument("--min-pairs", type=int, default=6)
     p.add_argument("--p-max", type=float, default=0.2)
@@ -444,7 +454,7 @@ def main() -> None:
             for n, v in state.data["versions"].items()
             if v.get("status") == "candidate" and v.get("parent") == inc_name
         ]
-        queued = queued_candidates(versions, inc_name, state)
+        queued = queued_candidates(versions, inc_name, state, args.skip_versions)
         if pending:
             name = pending[0]
             state.log(f"resuming candidate {name}")

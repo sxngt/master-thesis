@@ -1,11 +1,11 @@
-# v9 — generation 4 (2026-09-08)
+# v9 — generation 3 (2026-09-08)
 
-parent: v7 (excluded from the evolve3 queue 2026-09-08 — stairs dJ −0.127 ± 0.050 with the 3M interval, docs/coach_versions.md §6.4)
-hypothesis: Increasing the coach interval from 2M to 3M steps reduces over-intervention (the dominant failure mode: 10-14 kept changes per run, with 5 of 6 worst interventions occurring during positive trends where the coach should have waited), giving the policy more time to converge per change and cutting the harmful thrash cycle on rough-medium-naive.
-expected_delta_j: 0.08
+parent: v7p
+hypothesis: Capping interventions to one per three reports while 0.2 ≤ success < 0.8 will let the partially-walking policy consolidate its gait between changes, reducing the oscillation that is stalling stairs-medium-traditional (14-17 changes → ~7-9) while leaving rough settings (success 0.98+) unaffected because the rule is inactive above 0.8.
+expected_delta_j: 0.04
 
 ## Rationale
-The worst-intervention list is dominated by (a) lowering target_ms during a rising J trend (violating the CRITICAL RULE already in the prompt) and (b) 2-param reward tweaks during 0%-success explore phases. v8 showed that restricting param count (max_params=1) backfired—the coach compensated with MORE interventions (17-18) and worse sign accuracy (0.39). The small local model does not reliably follow 'prefer no change' instructions, so a structural timing constraint is more robust than another prompt rule. At 3M intervals the coach gets ~13 reports over 40M steps instead of ~20; the critical target_ms raises on rough-hard (already at 1.50 in all seeds) are captured with fewer reports because they are large discrete jumps, while the harmful micro-tweaks during explore are simply skipped. The curriculum-release invariant still steps target_ms up automatically, so no curriculum regression is expected.
+The incumbent's weakest setting is stairs-medium-traditional (J=1.251, success 0.55-0.72) where the coach makes 14-17 interventions over 20 reports (~1.5/report), including one 3-param rollback. On rough, the coach makes 8-11 interventions and success is 0.98+. The v8 rejection (max_params 3→2) proved that spreading changes across more reports is harmful on the floor, but the opposite problem — too many changes in the 0.2-0.8 success band — is stalling stairs. The coach's dJ sign accuracy is only 55%, so half its interventions are noise; each one resets a gait that was beginning to stabilize. Rough is unaffected because success is already >0.9 throughout (except a brief <0.2 floor window before breakout, where the playbook recipe already governs). A 3-sentence rule added to the system prompt enforces the frequency cap in exactly the regime where it helps, with no settings change and no risk to the rough-medium breakout.
 
 ## Code ideas (not applied)
-- Log a per-intervention 'time_since_last_change' feature so we can confirm in future diagnostics that the interval change actually reduced harmful mid-trend actions rather than just shifting them to different steps.
+- (none)

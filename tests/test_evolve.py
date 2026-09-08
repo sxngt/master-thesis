@@ -250,6 +250,8 @@ def test_evolve_state_names_and_history(tmp_path):
     st.log("hello")
     st.save()
     assert st.next_name() == "v7"
+    # a fresh root never overwrites version dirs an earlier root wrote
+    assert st.next_name(["v5p", "v9", "notes"]) == "v10"
     st2 = ev.EvolveState(tmp_path / "state.json")
     assert st2.incumbent == "v5" and st2.data["log"][-1]["msg"] == "hello"
     hist = st2.history_text()
