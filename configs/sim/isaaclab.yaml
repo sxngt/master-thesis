@@ -1,12 +1,23 @@
 # PRIMARY training simulator: Isaac Lab (Isaac Sim) — GPU-parallel.
 # Run with the Isaac Lab Python env (see docs/setup.md).
+run:
+  eval_episodes: 256           # first episode of 256 fixed envs (Evaluator); the cost is
+                               # one episode length regardless, 20 was too noisy for J
 sim:
   backend: isaaclab
   num_envs: 4096
   headless: true
   action_scale: 0.25           # joint target = default_pos + scale * action
   course_length_m: 5.0         # progress distance defining episode success
+  terminate_on_goal: true      # goal reach ends the episode (bootstrapped truncation);
+                               # false = legacy: keep walking until fall/timeout
   terrain_level: easy          # easy | medium | hard (curriculum overrides later)
+  reset_noise:                 # initial-state randomisation at every reset (legged_gym /
+    pos_xy_m: 0.5              #   Isaac Lab velocity-env practice; U(-x, x)). Without it
+    z_m: 0.03                  #   every env of a terrain patch spawns bit-identical and a
+    yaw_rad: 3.1416            #   deterministic eval collapses to 4 effective samples
+    vel_ms: 0.3                #   (2x2 patches): success rate quantised to quarters.
+    joint_scale: [0.8, 1.2]    #   Set to null for the legacy deterministic reset.
 # NOTE (off-policy algorithms — SAC/TD3/DDPG): override num_envs down
 # (e.g. 64-256) so the update-to-sample ratio stays reasonable:
 #   --override sim.num_envs=128

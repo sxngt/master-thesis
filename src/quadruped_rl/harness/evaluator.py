@@ -50,33 +50,51 @@ class Evaluator:
     )
 
     def _rollout_vec(self, algorithm) -> list[dict[str, Any]]:
-        """Vectorized rollout: run all N envs, harvest the first
-        `eval_episodes` completed episodes (auto-reset semantics)."""
+        """Vectorized rollout: the FIRST episode of each of `eval_episodes`
+        fixed envs (evenly spaced over the N parallel envs).
+
+        Harvesting "the first K episodes to finish" instead (the old
+        behaviour) is race-biased: with thousands of envs the earliest
+        terminations are the early falls, so the sample is dominated by
+        failures whenever more than K envs fall before the fast runners
+        reach the goal, and success_rate flips between ~0 and ~1 from one
+        eval to the next. Cost is bounded by one episode length regardless
+        of K, so K can be in the hundreds.
+        """
         env = self.env
+        n_eval = min(self.num_episodes, env.num_envs)
+        sel = np.unique(np.linspace(0, env.num_envs - 1, n_eval).round().astype(int))
         obs = env.reset()
-        acc: list[dict[str, list]] = [{k: [] for k in self._VEC_KEYS} for _ in range(env.num_envs)]
-        episodes: list[dict[str, Any]] = []
-        safety_limit = env.max_steps * (self.num_episodes + 1)
-        for _ in range(safety_limit):
+        first_done = np.full(env.num_envs, -1, dtype=int)
+        acc: dict[str, list] = {k: [] for k in self._VEC_KEYS}
+        goal: list[np.ndarray] = []
+        dist: list[np.ndarray] = []
+        for t in range(env.max_steps + 1):
             actions = algorithm.act(obs, deterministic=True)
             obs, _, dones, info = env.step(actions)
-            info_np = {k: self._to_np(v) for k, v in info.items()}
+            for k in self._VEC_KEYS:
+                if k in info:
+                    acc[k].append(self._to_np(info[k])[sel])
+            goal.append(self._to_np(info["reached_goal"])[sel])
+            dist.append(self._to_np(info["goal_distance_m"])[sel])
             dones_np = self._to_np(dones).astype(bool)
-            for i in range(env.num_envs):
-                for k in self._VEC_KEYS:
-                    if k in info_np:
-                        acc[i][k].append(info_np[k][i])
-                if dones_np[i]:
-                    traj = {k: np.asarray(v) for k, v in acc[i].items() if v}
-                    traj["steps"] = len(acc[i]["positions"])
-                    traj["dt"] = env.control_dt
-                    traj["reached_goal"] = bool(info_np["reached_goal"][i])
-                    traj["goal_distance_m"] = float(info_np["goal_distance_m"][i])
-                    episodes.append(traj)
-                    acc[i] = {k: [] for k in self._VEC_KEYS}
-            if len(episodes) >= self.num_episodes:
+            fresh = dones_np & (first_done < 0)
+            first_done[fresh] = t
+            if (first_done[sel] >= 0).all():
                 break
-        return episodes[: self.num_episodes]
+        stacked = {k: np.stack(v) for k, v in acc.items() if v}  # [T, K, ...]
+        goal_np, dist_np = np.stack(goal), np.stack(dist)
+        episodes: list[dict[str, Any]] = []
+        for j, i in enumerate(sel):
+            # an env still running at the horizon counts as a full, failed episode
+            t_end = first_done[i] if first_done[i] >= 0 else len(goal_np) - 1
+            traj = {k: v[: t_end + 1, j] for k, v in stacked.items()}
+            traj["steps"] = t_end + 1
+            traj["dt"] = env.control_dt
+            traj["reached_goal"] = bool(goal_np[t_end, j])
+            traj["goal_distance_m"] = float(dist_np[t_end, j])
+            episodes.append(traj)
+        return episodes
 
     @staticmethod
     def _to_np(x) -> np.ndarray:
@@ -117,6 +135,7 @@ class Evaluator:
         cfg_robot = self.cfg["robot"]
         out: dict[str, float] = {}
         out["success_rate"] = success_rate([e["reached_goal"] for e in episodes])
+        out["n_episodes"] = float(len(episodes))  # for the SE of the rate (coach v5)
 
         vels, cots, path_effs, stabs = [], [], [], []
         for e in episodes:
@@ -139,6 +158,7 @@ class Evaluator:
         ]:
             if values:
                 out[name] = float(np.mean(values))
+                out[f"{name}_sd"] = float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
 
         completed = [completion_time_s(e["steps"], e["dt"]) for e in episodes if e["reached_goal"]]
         if completed:

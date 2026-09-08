@@ -217,6 +217,8 @@ def _build_env_cfg(cfg: dict[str, Any], num_joints: int):
         track_air_time=True,
     )
     env_cfg.action_scale = sim.get("action_scale", 0.25)
+    env_cfg.terminate_on_goal = bool(sim.get("terminate_on_goal", True))
+    env_cfg.reset_noise = dict(sim.get("reset_noise") or {})  # {} = deterministic (legacy)
     env_cfg.robot_meta = robot_meta
     env_cfg.photoreal = bool(sim.get("render"))
     if sim.get("render"):
@@ -334,6 +336,7 @@ def _make_quadruped_env_class():
             self._previous_actions = torch.zeros(n, j, device=dev)
             self._start_pos = torch.zeros(n, 3, device=dev)
             self._fallen = torch.zeros(n, dtype=torch.bool, device=dev)
+            self._reached = torch.zeros(n, dtype=torch.bool, device=dev)
             meta = self.cfg.robot_meta
             self._base_id, _ = self._contact_sensor.find_bodies(meta["base"])
             self._feet_ids, feet_names = self._contact_sensor.find_bodies(meta["feet"])
@@ -470,6 +473,7 @@ def _make_quadruped_env_class():
                 "yaw_rate": z(),
                 "falls": z(),
                 "timeouts": z(),
+                "goals": z(),
                 "slip": z(),
             }
 
@@ -498,8 +502,11 @@ def _make_quadruped_env_class():
             st["v_y"] += state["lateral_velocity_ms"].abs().mean()
             st["yaw_rate"] += state["yaw_rate_rads"].abs().mean()
             st["slip"] += state["foot_slip_velocity"].mean()
+            timed_out = self.episode_length_buf >= self.max_episode_length - 1
             st["falls"] += self._fallen.float().sum()
-            st["timeouts"] += (self.episode_length_buf >= self.max_episode_length - 1).float().sum()
+            st["timeouts"] += (timed_out & ~self._fallen).float().sum()
+            if self.cfg.terminate_on_goal:
+                st["goals"] += (self._reached & ~self._fallen & ~timed_out).float().sum()
 
         def training_stats(self) -> dict[str, float]:
             st = self._st
@@ -507,7 +514,7 @@ def _make_quadruped_env_class():
             if n == 0:
                 return {}
             f = lambda k: float(st[k]) / n  # noqa: E731
-            episodes = float(st["falls"]) + float(st["timeouts"])
+            episodes = float(st["falls"]) + float(st["timeouts"]) + float(st["goals"])
             out = {
                 "gait/duty_factor": f("contact"),
                 "gait/diagonal_sync": f("diag_sync"),
@@ -521,6 +528,8 @@ def _make_quadruped_env_class():
                 "motion/yaw_rate": f("yaw_rate"),
                 "motion/foot_slip": f("slip"),
                 "episode/fall_fraction": float(st["falls"]) / max(episodes, 1.0),
+                "episode/goal_fraction": float(st["goals"]) / max(episodes, 1.0),
+                "episode/timeout_fraction": float(st["timeouts"]) / max(episodes, 1.0),
                 "episode/count": episodes,
             }
             out.update({f"reward/{k}": v for k, v in self._reward_fn.pop_stats().items()})
@@ -536,6 +545,16 @@ def _make_quadruped_env_class():
             )
             tipped = self._robot.data.projected_gravity_b[:, 2] > -0.5
             self._fallen = base_hit | tipped
+            # Reaching the course goal ends the episode as a *truncation*
+            # (value-bootstrapped like a timeout, so the optimal policy is
+            # unchanged). Without it a good policy keeps walking past the
+            # goal, off the 2x2 x 8 m terrain patch (~6 m from the spawn
+            # centre) and every successful episode ends in a spurious
+            # "fall" — corrupting both the fall penalty and the KPIs.
+            progress = (self._robot.data.root_pos_w[:, :2] - self._start_pos[:, :2]).norm(dim=-1)
+            self._reached = progress >= self._course_length_m
+            if self.cfg.terminate_on_goal:
+                time_out = time_out | self._reached
             return self._fallen, time_out
 
         def _reset_idx(self, env_ids):
@@ -545,10 +564,33 @@ def _make_quadruped_env_class():
             super()._reset_idx(env_ids)
             self._actions[env_ids] = 0.0
             self._previous_actions[env_ids] = 0.0
-            joint_pos = self._robot.data.default_joint_pos[env_ids]
-            joint_vel = self._robot.data.default_joint_vel[env_ids]
+            joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
+            joint_vel = self._robot.data.default_joint_vel[env_ids].clone()
             root = self._robot.data.default_root_state[env_ids].clone()
             root[:, :3] += self._terrain.env_origins[env_ids]
+            noise = self.cfg.reset_noise
+            if noise:
+                # Initial-state randomisation (legged_gym / Isaac Lab velocity
+                # env practice). Every env of a terrain patch shares one
+                # origin, so without it 1024 envs start bit-identical and a
+                # deterministic evaluation has 4 effective samples (2x2
+                # patches) — success rate quantised to quarters.
+                from isaaclab.utils.math import quat_from_euler_xyz, quat_mul
+
+                n, dev = len(env_ids), self.device
+                u = lambda lo, hi, *shape: torch.rand(*shape, device=dev) * (hi - lo) + lo  # noqa: E731
+                xy = float(noise.get("pos_xy_m", 0.0))
+                root[:, :2] += u(-xy, xy, n, 2)
+                root[:, 2] += float(noise.get("z_m", 0.0))
+                yaw = float(noise.get("yaw_rad", 0.0))
+                if yaw > 0:
+                    zeros = torch.zeros(n, device=dev)
+                    yaw_q = quat_from_euler_xyz(zeros, zeros, u(-yaw, yaw, n))
+                    root[:, 3:7] = quat_mul(yaw_q, root[:, 3:7])
+                v = float(noise.get("vel_ms", 0.0))
+                root[:, 7:13] += u(-v, v, n, 6)
+                lo, hi = noise.get("joint_scale", (1.0, 1.0))
+                joint_pos *= u(float(lo), float(hi), n, joint_pos.shape[1])
             self._robot.write_root_pose_to_sim(root[:, :7], env_ids)
             self._robot.write_root_velocity_to_sim(root[:, 7:], env_ids)
             self._robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
@@ -576,7 +618,7 @@ def _make_quadruped_env_class():
                 "contact_forces": feet_forces,
                 "power_w": power,
                 "falls": self._fallen.float(),
-                "reached_goal": progress >= self._course_length_m,
+                "reached_goal": self._reached.clone(),
                 "goal_distance_m": torch.full_like(progress, self._course_length_m),
             }
 
@@ -650,6 +692,10 @@ class IsaacLabEnv(VectorEnv):
 
     def set_reward_params(self, updates: dict[str, float]) -> None:
         self._env._reward_fn.set_params(updates)
+        # the commanded speed is also an observation (and the gait-prior
+        # gate): keep it consistent when a coach retargets the velocity term
+        if "forward_velocity.target_ms" in updates:
+            self._env._target_ms = float(updates["forward_velocity.target_ms"])
 
     def training_stats(self) -> dict[str, float]:
         return self._env.training_stats()
