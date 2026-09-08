@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 """Generate the reward-coach study job list (Phase 3 pilot).
 
-Two settings, four conditions each (fixed | random | hillclimb | llm), 3 seeds:
+Settings, four conditions each (fixed | random | hillclimb | llm):
   A "recovery": naive reward on flat        -> can the coach repair a broken reward?
   B "barrier" : traditional reward on rough-hard and stairs-medium
                 (0 % success for every algorithm in Phase 1) -> can it break the wall?
+  D "design"  : naive reward on rough-medium -> can it design a rough-terrain
+                reward from a bare velocity+energy start?
 
 The python interpreter is taken from $ISAAC_PY at run time so the same job
 file runs locally (conda env_isaaclab) and on the 4x4090 server (Isaac Sim
@@ -27,6 +29,7 @@ SETTINGS = [
     ("A", "flat", "easy", "naive"),
     ("B", "rough", "hard", "traditional"),
     ("B", "stairs", "medium", "traditional"),
+    ("D", "rough", "medium", "naive"),
 ]
 PY = "${ISAAC_PY:-$HOME/anaconda3/envs/env_isaaclab/bin/python}"
 

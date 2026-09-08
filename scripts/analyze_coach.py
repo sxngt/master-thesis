@@ -17,6 +17,7 @@ import json
 import re
 from pathlib import Path
 
+import pandas as pd
 import yaml
 
 from quadruped_rl.analysis.coach import (
@@ -52,16 +53,37 @@ def _run_ids_from_jobs(jobs: str) -> list[str]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--results-root", default="data/results")
-    p.add_argument("--jobs", default=None, help="restrict to runs listed in <jobs>.status.json")
-    p.add_argument("--metrics", nargs="+", default=["objective_final", "success_rate"])
+    p.add_argument("--results-root", nargs="+", default=["data/results"])
+    p.add_argument(
+        "--jobs",
+        nargs="+",
+        default=None,
+        help="restrict to runs listed in these <jobs>.status.json (union)",
+    )
+    p.add_argument(
+        "--control-jobs",
+        nargs="+",
+        default=None,
+        help="also take the `none` runs of these <jobs>.status.json as the control group "
+        "(a coach-only batch trained with the same environment code)",
+    )
+    p.add_argument(
+        "--metrics", nargs="+", default=["objective_final", "objective_late", "success_rate"]
+    )
     p.add_argument("--coach-config", default="configs/coach/llm.yaml")
     p.add_argument("--out", default="data/results/analysis_coach")
     args = p.parse_args()
 
     coach_cfg = _coach_cfg(args.coach_config)
-    run_ids = _run_ids_from_jobs(args.jobs) if args.jobs else None
+    run_ids = None
+    if args.jobs:
+        run_ids = [rid for jobs in args.jobs for rid in _run_ids_from_jobs(jobs)]
     table = load_coach_table(args.results_root, run_ids, weights=coach_cfg["objective"])
+    if args.control_jobs:
+        ctrl_ids = [rid for jobs in args.control_jobs for rid in _run_ids_from_jobs(jobs)]
+        ctrl = load_coach_table(args.results_root, ctrl_ids, weights=coach_cfg["objective"])
+        ctrl = ctrl[ctrl["condition"] == "none"]
+        table = pd.concat([table, ctrl]).drop_duplicates("run_id")
     if table.empty:
         raise SystemExit("no completed coach runs found")
     out = Path(args.out)
@@ -69,7 +91,9 @@ def main() -> None:
     public = [c for c in table.columns if not c.startswith("_")]
     table[public].to_csv(out / "results_table.csv", index=False)
     print(
-        table.groupby(["setting", "condition"])[["objective_final", "success_rate", "n_kept"]]
+        table.groupby(["setting", "condition"])[
+            ["objective_final", "objective_late", "success_rate", "n_kept", "n_restored"]
+        ]
         .agg(["mean", "std", "count"])
         .to_string()
     )

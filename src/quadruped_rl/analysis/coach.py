@@ -20,6 +20,9 @@ import yaml
 from quadruped_rl.analysis.plots import STYLE, _save
 from quadruped_rl.analysis.statistics import compare_algorithms
 
+# numpy < 2 (Isaac Sim 4.5 bundles 1.26) only has the old name
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 # objective shared by every condition (configs/coach/*.yaml); the fixed
 # condition has no coach block, so it is recomputed here from eval metrics
 DEFAULT_OBJECTIVE = {"success_rate": 1.0, "mean_forward_velocity_ms": 0.5}
@@ -75,15 +78,35 @@ def load_run(run_dir: Path, weights: dict[str, float] | None = None) -> dict[str
         "seed": cfg["run"]["seed"],
         "objective_final": objective_from_eval(final, weights, "final/"),
         "objective_best": float(obj.max()) if len(obj) else float("nan"),
-        "objective_auc": float(np.trapezoid(obj, steps) / max(steps[-1], 1.0))
+        "objective_auc": float(_trapezoid(obj, steps) / max(steps[-1], 1.0))
         if len(obj) > 1
         else 0.0,
         "n_interventions": len(interventions),
         "n_kept": sum(r["status"] == "kept" for r in interventions),
         "n_rolled_back": sum(r["status"] == "rolled_back" for r in interventions),
         "n_pending": sum(r["status"] == "pending" for r in interventions),  # unsettled at end
+        "n_restored": sum(r.get("restored_from_step") is not None for r in interventions),
+        "n_api_errors": sum(_diag(r).startswith("api error") for r in interventions),
+        "n_discarded": sum(_diag(r).startswith("discarded") for r in interventions),
+        "n_algo_moves": sum(
+            any(k.startswith("algo.") for k in r["applied"]) for r in interventions
+        ),
+        # mean of the last 5 evals: one eval is noisy (K=256 first episodes), and
+        # PPO runs oscillate late in training — the final checkpoint alone
+        # over-weights that phase (the thesis reports both)
+        "objective_late": float(obj[-5:].mean()) if len(obj) else float("nan"),
         "tokens_in": sum((r.get("usage") or {}).get("input_tokens", 0) for r in log),
         "tokens_out": sum((r.get("usage") or {}).get("output_tokens", 0) for r in log),
+        # cost of one scheduler call (local LLM: wall time the run waits, or the
+        # staleness of an asynchronous proposal) — 0 when not recorded
+        "llm_latency_s": float(np.mean([r.get("llm_latency_s") or 0.0 for r in interventions]))
+        if interventions
+        else 0.0,
+        "tokens_out_per_call": float(
+            np.mean([(r.get("usage") or {}).get("output_tokens", 0) for r in log if r.get("usage")])
+        )
+        if any(r.get("usage") for r in log)
+        else 0.0,
         "_steps": steps,
         "_objective": obj,
         "_interventions": interventions,
@@ -96,18 +119,29 @@ def load_run(run_dir: Path, weights: dict[str, float] | None = None) -> dict[str
     return row
 
 
+def _diag(r: dict) -> str:
+    return str(r.get("diagnosis") or "")
+
+
 def load_coach_table(
-    results_root: str | Path,
+    results_root: str | Path | list[str | Path],
     run_ids: list[str] | None = None,
     weights: dict[str, float] | None = None,
 ) -> pd.DataFrame:
+    """One row per run under results_root (a directory or a list of them).
+
+    Several roots let a batch of coach runs be analysed against the control
+    (``none``) runs of an earlier batch trained with the same environment code.
+    """
+    roots = [results_root] if isinstance(results_root, (str, Path)) else list(results_root)
     rows = []
-    for d in sorted(Path(results_root).iterdir()):
-        if run_ids is not None and d.name not in run_ids:
-            continue
-        r = load_run(d, weights)
-        if r is not None:
-            rows.append(r)
+    for root in roots:
+        for d in sorted(Path(root).iterdir()):
+            if run_ids is not None and d.name not in run_ids:
+                continue
+            r = load_run(d, weights)
+            if r is not None:
+                rows.append(r)
     return pd.DataFrame(rows)
 
 
@@ -135,6 +169,8 @@ def intervention_table(table: pd.DataFrame) -> pd.DataFrame:
                     "step": it["step"],
                     "status": it["status"],
                     "n_applied": len(it["applied"]),
+                    "restored_from_step": it.get("restored_from_step"),
+                    "tolerance_used": it.get("tolerance_used"),
                     "applied": "; ".join(f"{k}={v:.3g}" for k, v in it["applied"].items()),
                     "objective_before": it.get("objective_before"),
                     "objective_after": it.get("objective_after"),

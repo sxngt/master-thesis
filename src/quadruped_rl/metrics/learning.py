@@ -43,9 +43,13 @@ def training_stability(values: np.ndarray, window: int = 10) -> float:
     return float(np.mean(np.std(rolled, axis=1)))
 
 
+# numpy < 2 (Isaac Sim 4.5 bundles 1.26) only has the old name
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
+
 def area_under_curve(steps: np.ndarray, values: np.ndarray) -> float:
     """Normalized AUC of the learning curve — combined speed+asymptote score."""
     if len(steps) < 2:
         return 0.0
     span = steps[-1] - steps[0]
-    return float(np.trapezoid(values, steps) / span) if span > 0 else 0.0
+    return float(_trapezoid(values, steps) / span) if span > 0 else 0.0
