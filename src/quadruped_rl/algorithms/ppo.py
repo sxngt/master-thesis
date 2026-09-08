@@ -39,7 +39,23 @@ class PPO(Algorithm):
             a["gae_lambda"], cfg.get("terrain", {}).get("category", "baseline")
         )
         self.buffer: RolloutBuffer | VecRolloutBuffer | None = None
-        self.kl_penalty = float(a.get("adaptive_kl", {}).get("penalty_init", 0.0))
+        akl = a.get("adaptive_kl", {})
+        self.kl_penalty = float(akl.get("penalty_init", 0.0))
+        # Bounds for the adaptive penalty. Unbounded doubling let beta reach
+        # 1e3-1e20 in runs whose mean update KL sat above target for long
+        # stretches (reward plateaus, and the last quarter of healthy runs):
+        # the penalty then dominated the loss, froze the policy and finally
+        # overflowed to NaN. Runs that trained well never needed beta above 8,
+        # so the default cap only bites in that regime; there is no floor by
+        # default so that everything below the cap behaves as before.
+        self.kl_penalty_min = float(akl.get("penalty_min", 0.0))
+        self.kl_penalty_max = float(akl.get("penalty_max", 8.0))
+        # Early stop of the epoch loop once a minibatch KL exceeds stop_kl:
+        # coherent Adam steps after a reward change moved the policy by KL ~19
+        # inside one update (v8 stairs s0, 32.8M) and the run lost a walking
+        # gait for 4M steps. Healthy minibatches stay below ~0.06, so the
+        # default only cuts such runaway updates short.
+        self.kl_stop = float(akl.get("stop_kl", 0.0)) if akl.get("enabled") else 0.0
 
     # ------------------------------------------------------------------ utils
     def _to_t(self, x) -> torch.Tensor:
@@ -163,13 +179,18 @@ class PPO(Algorithm):
         mb_size = max(n // a["num_minibatches"], 1)
         idx = np.arange(n)
         losses, kls = [], []
+        skipped = 0
 
+        stopped = False
         for _ in range(a["num_epochs"]):
             np.random.shuffle(idx)
             for start in range(0, n, mb_size):
                 mb = idx[start : start + mb_size]
                 dist = self.actor.dist(obs[mb])
                 log_probs = dist.log_prob(actions[mb]).sum(-1)
+                if self.kl_stop and float((old_log_probs[mb] - log_probs).mean()) > self.kl_stop:
+                    stopped = True
+                    break
                 ratio = (log_probs - old_log_probs[mb]).exp()
 
                 clip = a["clip_range"]
@@ -183,6 +204,10 @@ class PPO(Algorithm):
                 value_loss = (self.critic(obs[mb]) - returns[mb]).pow(2).mean()
                 entropy = dist.entropy().sum(-1).mean()
                 loss = policy_loss + a["value_coef"] * value_loss - a["entropy_coef"] * entropy
+                if not torch.isfinite(loss):
+                    # a non-finite minibatch would poison the weights; skip it
+                    skipped += 1
+                    continue
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -193,16 +218,35 @@ class PPO(Algorithm):
                 self.optimizer.step()
                 losses.append(float(loss.detach()))
                 kls.append(float(approx_kl.detach()))
+            if stopped:
+                break
 
-        mean_kl = float(np.mean(kls))
-        akl = a.get("adaptive_kl", {})
+        mean_kl = float(np.mean(kls)) if kls else 0.0
+        self.adapt_kl_penalty(mean_kl)
+        out = {
+            "loss": float(np.mean(losses)) if losses else float("nan"),
+            "approx_kl": mean_kl,
+            "kl_penalty": self.kl_penalty,
+        }
+        if skipped:
+            out["nonfinite_minibatches"] = float(skipped)
+        if stopped:
+            out["kl_early_stop"] = 1.0
+        return out
+
+    def adapt_kl_penalty(self, mean_kl: float) -> float:
+        """PPO-penalty schedule (Schulman et al. 2017): double beta when the
+        update overshoots the KL target, halve it when it undershoots, bounded
+        to [penalty_min, penalty_max]."""
+        akl = self.acfg.get("adaptive_kl", {})
         if akl.get("enabled"):
-            target = akl["target_kl"]
+            target = float(akl["target_kl"])
             if mean_kl > 1.5 * target:
                 self.kl_penalty *= 2.0
             elif mean_kl < target / 1.5:
                 self.kl_penalty *= 0.5
-        return {"loss": float(np.mean(losses)), "approx_kl": mean_kl, "kl_penalty": self.kl_penalty}
+            self.kl_penalty = min(max(self.kl_penalty, self.kl_penalty_min), self.kl_penalty_max)
+        return self.kl_penalty
 
     # ------------------------------------------------ live hyperparameters
     LIVE_HYPERPARAMS = ("learning_rate", "entropy_coef", "clip_range")
@@ -237,6 +281,9 @@ class PPO(Algorithm):
         self.actor.load_state_dict(ckpt["actor"])
         self.critic.load_state_dict(ckpt["critic"])
         self.optimizer.load_state_dict(ckpt["optimizer"])
-        self.kl_penalty = ckpt.get("kl_penalty", self.kl_penalty)
+        self.kl_penalty = min(
+            max(float(ckpt.get("kl_penalty", self.kl_penalty)), self.kl_penalty_min),
+            self.kl_penalty_max,
+        )
         if "hyperparams" in ckpt:
             self.set_hyperparams(ckpt["hyperparams"])

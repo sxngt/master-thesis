@@ -5,7 +5,8 @@ algorithm:
   gamma: 0.99
   gae_lambda: 0.95             # dynamically adjusted by terrain complexity (see envs/curriculum.py)
   clip_range: 0.2
-  adaptive_kl: { enabled: true, target_kl: 0.01, penalty_init: 1.0 }
+  adaptive_kl:                 # PPO-penalty on top of clipping; beta bounded, epochs cut at stop_kl (algorithms/ppo.py)
+    { enabled: true, target_kl: 0.01, penalty_init: 1.0, penalty_min: 0.0, penalty_max: 8.0, stop_kl: 0.2 }
   entropy_coef: 0.005   # 0.01 kept std ~0.8; deterministic gait needs annealing
   value_coef: 0.5
   max_grad_norm: 1.0
