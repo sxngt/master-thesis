@@ -188,9 +188,17 @@ class PPO(Algorithm):
                 mb = idx[start : start + mb_size]
                 dist = self.actor.dist(obs[mb])
                 log_probs = dist.log_prob(actions[mb]).sum(-1)
-                if self.kl_stop and float((old_log_probs[mb] - log_probs).mean()) > self.kl_stop:
-                    stopped = True
-                    break
+                if self.kl_stop:
+                    kl_mb = float((old_log_probs[mb] - log_probs).mean())
+                    if kl_mb > self.kl_stop:
+                        # count the runaway KL so the penalty schedule sees an
+                        # overshoot: with only the (zero) first-minibatch KL in
+                        # the mean, beta was *halved* at every stopped update
+                        # and the step size grew while the policy was diverging
+                        # (v7 rough-hard s2, 24-26M, LR 9e-4: 16/40 updates stopped)
+                        kls.append(kl_mb)
+                        stopped = True
+                        break
                 ratio = (log_probs - old_log_probs[mb]).exp()
 
                 clip = a["clip_range"]

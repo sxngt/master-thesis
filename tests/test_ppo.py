@@ -90,7 +90,7 @@ def test_load_clamps_a_runaway_checkpoint(tmp_path):
 
 
 def test_epoch_loop_stops_once_a_minibatch_kl_runs_away():
-    algo = _ppo(penalty_init=0.0, stop_kl=0.2)
+    algo = _ppo(penalty_init=1.0, stop_kl=0.2)
     n = 32
     obs = torch.randn(n, 8)
     actions = torch.randn(n, 2)
@@ -102,6 +102,8 @@ def test_epoch_loop_stops_once_a_minibatch_kl_runs_away():
     out = algo._update(obs, actions, old_log_probs, adv, returns)
     assert out["kl_early_stop"] == 1.0
     assert all(torch.equal(a, b) for a, b in zip(before, algo.actor.parameters(), strict=True))
+    # the runaway KL counts as an overshoot: beta doubles, it must not halve
+    assert out["approx_kl"] > 0.2 and algo.kl_penalty == 2.0
     # a healthy update never trips it
     with torch.no_grad():
         fresh = algo.actor.dist(obs).log_prob(actions).sum(-1)
