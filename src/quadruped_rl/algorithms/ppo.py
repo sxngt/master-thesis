@@ -46,8 +46,12 @@ class PPO(Algorithm):
         # stretches (reward plateaus, and the last quarter of healthy runs):
         # the penalty then dominated the loss, froze the policy and finally
         # overflowed to NaN. Runs that trained well never needed beta above 8,
-        # so the default cap only bites in that regime; there is no floor by
-        # default so that everything below the cap behaves as before.
+        # so the default cap only bites in that regime. The floor matters just
+        # as much: with none, beta halved to ~1e-20 during the low-KL first
+        # quarter (KL 0.005 < target/1.5) and needed ~60 consecutive doublings
+        # to act again, so the penalty was absent exactly when late-training
+        # KL rose (evolve3 stairs, 36M+: mean KL 0.03, 12 early stops per 4M).
+        # ppo.yaml sets 2^-6 so beta is back at the cap within 10 updates.
         self.kl_penalty_min = float(akl.get("penalty_min", 0.0))
         self.kl_penalty_max = float(akl.get("penalty_max", 8.0))
         # Early stop of the epoch loop once a minibatch KL exceeds stop_kl:

@@ -35,7 +35,13 @@ def _ppo(**akl):
 def test_default_bounds_come_from_the_algorithm_yaml():
     algo = _ppo()
     assert algo.kl_penalty == 1.0
-    assert algo.kl_penalty_min == 0.0 and algo.kl_penalty_max == 8.0
+    assert algo.kl_penalty_min == 2**-6 and algo.kl_penalty_max == 8.0
+    # the floor keeps the penalty within reach: a quarter of low-KL updates
+    # leaves beta at the floor, and ten overshoots bring it back to the cap
+    for _ in range(100):
+        algo.adapt_kl_penalty(0.001)
+    assert algo.kl_penalty == 2**-6
+    assert [algo.adapt_kl_penalty(0.03) for _ in range(10)][-1] == 8.0
 
 
 def test_penalty_doubles_and_halves_within_bounds():
