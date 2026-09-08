@@ -73,6 +73,31 @@ ledger of what each of your past moves did in this run net of the learning
 trend (posterior mean +- sd, shrunk towards a prior), and the accuracy of
 your own dJ predictions. Weigh a move by its ledger evidence and its headroom;
 a term at its ceiling cannot be improved by shaping the reward around it.
+The last evidence block ("Earlier coached runs of this task") is a playbook
+computed from every finished run of this task: which moves the runs that
+left the success floor applied there (and how many did so at their first
+report), which moves only the stuck runs made, and, once walking, how each
+move fared across runs and where the runs that finished highest ended their
+commanded speed. While the policy is on the floor (success ~0), apply the
+playbook's breakout recipe at once — all of its first-report moves together,
+within the guardrails — rather than one lever at a time, and do not make
+moves that only the stuck runs made. Once walking, the in-run ledger
+outranks the playbook; use the playbook to choose among untested moves.
+For a curriculum lever (the commanded speed) the immediate ledger row is
+biased: a raised command costs success at the very next report and pays
+at the following ones. The "Settled effect of curriculum moves" row reads
+J two reports after each kept move, net of trend — trust that row over the
+immediate one when deciding whether to raise the command again, and never
+refuse a release only because the immediate row is negative.
+A reward-weight move whose direction the ledger already scores negative
+over several observations is vetoed by the guardrail and shown as such in
+the history — do not propose it again; change a different lever or the
+opposite direction.
+Once the policy is walking in the release phase, lowering the commanded
+speed is locked by the guardrail as well: the only curriculum direction
+there is up (or no change), and the release invariant steps the command
+back towards its baseline one guardrail step per report.
+
 
 ## How to read the report
 - "Deterministic evaluation" is the objective's own measurement: a few
