@@ -91,8 +91,15 @@ docker compose -f docker/docker-compose.yml build
   aiohttp 전송 계층을 번들하는데 Isaac Sim 4.5의 prebundled aiohttp가 구버전이라
   import 시 `AttributeError: SocketTimeoutError` — 1.86 미만으로 고정할 것.
   pydantic/dotenv/pyyaml은 Isaac에 이미 포함.
+- LLM 코치 배치 전 OpenAI 크레딧 잔액 확인(4차 배치 2026-09-05: 45잡 후 소진 → 15잡
+  429 사망). 코치는 API 오류 시 30/60/120 s 재시도 후 그 리포트만 건너뛰고 학습을
+  계속하며(`coach_log.jsonl`의 `diagnosis: "api error: ..."`), 분석 표의 `n_api_errors`가
+  0이 아닌 런은 LLM 조건으로 집계하지 말 것.
 - 서버 시스템 `python3`는 3.8 — `scripts/run_jobs.py`, `batch_status.py`처럼 시스템
   python으로 도는 스크립트는 `from __future__ import annotations` 유지.
 - 실측 처리량 (PPO 4096 envs): GPU당 1잡 108k steps/s, 2잡 동시 46~66k/잡
   (합계 ~120k). VRAM은 잡당 ~4.5 GB지만 GPU 연산·CPU(20스레드, 70 %)가 병목이라
   GPU당 2잡(`--parallel 8`)이 상한. 40M 스텝 잡 ≈ 10분.
+- 평가 비용: `run.eval_episodes=256`(첫 에피소드 집계)은 로봇이 20 s를 다 쓰는 초기
+  평가에서 ~40 s, 목표 도달 정책에서는 ~10 s 소요. 1M 스텝마다 평가하면 40M 잡에
+  최대 +25 분 — 코치 배치는 ~10 GB VRAM/잡, 8잡 동시 기준 60잡 ≈ 3 시간.
