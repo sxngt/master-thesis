@@ -1,3 +1,11 @@
 # Decision-layer overrides of coach version v10 (evolution generation 4).
+# Rewritten 2026-09-09: the driver wrote only the meta-LLM's delta and dropped
+# v7p's inherited overrides (evolve.py Proposal.resolve fix); the evolve3 runs
+# of v10 ran without them. This is the version as intended, for evolve4.
 coach:
+  playbook:
+    enabled: true
+  settled_reports: 2
+  ledger_veto_obs: 3
+  curriculum_lock: true
   release_min_success: 0.5

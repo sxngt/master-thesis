@@ -159,6 +159,28 @@ def test_omitted_templates_inherit_from_incumbent(tmp_path):
         and r.user_md == COACH_USER
         and r.coach_overrides == {"max_rel_change": 0.4}
     )
+    # the incumbent's own overrides carry over (deltas are written against the
+    # effective settings); the proposal's keys win, nested tables merge
+    inc2 = ev.Version(
+        name="v7p",
+        dir=None,
+        system=COACH_SYSTEM,
+        user=COACH_USER,
+        overrides={"playbook": {"enabled": True}, "curriculum_lock": True, "noise_z": 2.0},
+    )
+    p2 = ev.Proposal.from_json(
+        '{"hypothesis": "x", "coach_overrides": {"noise_z": 2.5, "playbook": {"enabled": false}}}'
+    )
+    r2 = p2.resolve(inc2)
+    assert r2.coach_overrides == {
+        "playbook": {"enabled": False},
+        "curriculum_lock": True,
+        "noise_z": 2.5,
+    }
+    assert ev.validate_proposal(p2, inc2, PARAMS) == []
+    # same templates, only inherited overrides -> still "changes nothing"
+    errs = ev.validate_proposal(ev.Proposal.from_json('{"hypothesis": "x"}'), inc2, PARAMS)
+    assert any("changes nothing" in e for e in errs)
     # an unresolved proposal cannot be written; a resolved one can
     with pytest.raises(ValueError):
         ev.write_version(tmp_path, "v6", p, "v5", PARAMS, 1)

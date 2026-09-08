@@ -10,3 +10,8 @@ Both rejected candidates (v8: max_params→2, v9: 1-per-3-reports) tried to redu
 ## Code ideas (not applied)
 - Log whether the release phase actually triggered in each run (first report where success ≥ release_min_success and progress ≥ release_from_progress) so we can verify the delay on stairs vs rough in the next evaluation cycle
 - If the next run still shows the coach raising target_ms too aggressively on mid-success stairs (success 0.6-0.7), consider adding a soft prompt hint: 'When success is between 0.5 and 0.8, prefer raising target_ms by no more than 0.2 m/s per intervention to let the gait adapt.'
+
+## Note (2026-09-09)
+The evolve3 runs of v10 (old PPO stack) ran without v7p's inherited
+overrides (docs/coach_versions.md §6.12); coach.yaml was rewritten with them
+so evolve4 judges the version as intended.

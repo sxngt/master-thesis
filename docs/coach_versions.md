@@ -654,3 +654,29 @@ stairs는 대조군 1.094보다도 낮아 설정별 −0.05 기준에 단독으�
 메타 LLM은 4세대로 v7p의 후계를 다시 묻는다(서버 드라이버는 옛 번호 매김이라 이름이
 v10 — evolve2의 v10을 덮어쓴다, §6.10). 새 스택 evolve4 재시작은 이 시점이 최적:
 잃는 것은 메타 LLM 호출 하나뿐.
+
+### 6.12 드라이버 결함: 후보가 부모의 결정층 오버라이드를 잃었다 (2026-09-09 00:10)
+
+v10 rough s2가 26M에 target 1.5→1.2로 *내려* J 1.51에 머문 것(v7p의 curriculum_lock이면
+막혔을 이동)을 쫓다가 확인: `Proposal.resolve()`가 템플릿(system/user.md)은 인컴번트에서
+상속하지만 `coach_overrides`는 메타 LLM이 쓴 델타만 coach.yaml에 남긴다. 메타 LLM은
+"effective settings"를 보고 델타를 쓰므로(v9는 `coach: {}`) 서버 config.yaml로 확인하면:
+
+| 버전 | playbook.enabled | settled_reports | ledger_veto_obs | curriculum_lock |
+|---|---|---|---|---|
+| v7p | true | 2 | 3 | true |
+| v8, v9, v10 | **없음** | 없음 | 없음 | 없음 |
+
+즉 v8·v9·v10의 짝 비교는 "v7p − 결정층 + 가설"을 v7p와 비교한 것이다. 그래서:
+- v8 naive 1/3(§6.9)과 v9 naive 2/3(§6.11)은 max_params나 개입 상한 때문이 아니라
+  **플레이북이 꺼진** 결과와 구분되지 않는다(플레이북 없는 v7은 1/3, 있는 v7p는 3/3).
+- v9 stairs의 target 상향 연쇄·v10 rough s2의 하향은 **잠금이 꺼진** 결과일 수 있다.
+- v8·v9의 "기각"은 가설을 검정하지 못했다. 다만 조리법 재집계(§6.11)로 v8의 가설
+  (파라미터 수 축소)은 별도로 반박되고, v9의 가설(빈도 상한)은 stairs 병목이 방향이라는
+  분석과 맞지 않아 evolve4에서는 둘 다 `--skip-versions`로 제외하고 메타 LLM에 맡긴다.
+  v10(release_min_success 0.5)은 stairs 방향 문제를 겨냥하므로 coach.yaml을 의도대로
+  (v7p 오버라이드 + 0.5) 고쳐 evolve4 큐에 남긴다.
+
+수정: `resolve()`가 `_merge_coach(incumbent.overrides, proposal.overrides)`로 층을 쌓아
+버전 디렉터리가 자기완결적이 되게 했다(중첩 표는 키 단위 병합, 후보 키 우선). "변경 없음"
+검사는 후보의 델타로만 한다. `tests/test_evolve.py`. evolve4 스택 변경 묶음에 포함(5번째).

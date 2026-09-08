@@ -9,3 +9,10 @@ The incumbent's weakest setting is stairs-medium-traditional (J=1.251, success 0
 
 ## Code ideas (not applied)
 - (none)
+
+## Note (2026-09-09)
+The driver wrote only the meta-LLM's delta into coach.yaml and dropped the
+parent's (v7p) overrides — playbook, settled_reports, ledger_veto_obs,
+curriculum_lock — so the evolve3 runs of this version measured v7p minus its
+decision layer plus the hypothesis (docs/coach_versions.md §6.12). The
+verdict does not test the hypothesis. Fixed in evolve.py Proposal.resolve.

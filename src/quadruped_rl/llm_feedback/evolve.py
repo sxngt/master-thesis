@@ -172,11 +172,17 @@ class Proposal:
 
     def resolve(self, incumbent: Version) -> Proposal:
         """Fill omitted templates from the incumbent (a proposal may change only
-        the settings, or only one of the two templates)."""
+        the settings, or only one of the two templates) and layer the proposal's
+        overrides on top of the incumbent's, so a version dir stays
+        self-contained. The meta-LLM writes deltas against the effective
+        settings it is shown: evolve3 v8-v10 (2026-09-08) inherited v7p's
+        templates but not its playbook / curriculum lock / ledger veto, so
+        their verdicts measured the loss of those, not their hypotheses."""
         return replace(
             self,
             system_md=incumbent.system if self.system_md is None else self.system_md,
             user_md=incumbent.user if self.user_md is None else self.user_md,
+            coach_overrides=_merge_coach(incumbent.overrides or {}, self.coach_overrides),
         )
 
 
@@ -284,17 +290,18 @@ def validate_proposal(
     """All reasons a proposal cannot become a version (empty = valid).
     With ``base_coach`` (the coach preset) overrides equal to the effective
     value are reported as no-ops."""
+    own = prop.coach_overrides  # the proposal's deltas, before the incumbent's are layered in
     prop = prop.resolve(incumbent)
     errors: list[str] = []
     same_templates = (
         prop.system_md.strip() == incumbent.system.strip()
         and prop.user_md.strip() == incumbent.user.strip()
     )
-    if same_templates and not prop.coach_overrides:
+    if same_templates and not own:
         errors.append("proposal changes nothing (templates and overrides equal the incumbent)")
     elif same_templates and base_coach is not None:
         current = _merge_coach(base_coach, incumbent.overrides or {})
-        clean, _ = validate_overrides(prop.coach_overrides, params)
+        clean, _ = validate_overrides(own, params)
         noop = [
             k
             for k, v in _flatten(clean).items()
