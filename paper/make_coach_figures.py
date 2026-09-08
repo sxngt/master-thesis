@@ -260,7 +260,7 @@ def table10(roots: list[Path]) -> pd.DataFrame:
     return df
 
 
-def fig7(ctrl, coach, label):
+def fig7(ctrl, coach, label, suffix=""):
     plt.rcParams.update(STYLE)
     fig, axes = plt.subplots(1, 3, figsize=(W * 1.35, 2.3), sharey=True)
     for ax, s in zip(axes, SETTINGS, strict=True):
@@ -286,11 +286,11 @@ def fig7(ctrl, coach, label):
     axes[0].set_ylabel("Objective J")
     axes[0].legend(loc="lower right", frameon=False)
     for ext in ("png", "pdf"):
-        fig.savefig(FIG / f"fig7_coach_objective.{ext}", bbox_inches="tight")
+        fig.savefig(FIG / f"fig7_coach_objective{suffix}.{ext}", bbox_inches="tight")
     plt.close(fig)
 
 
-def fig8(ctrl, coach, label):
+def fig8(ctrl, coach, label, suffix=""):
     plt.rcParams.update(STYLE)
     s = "rough-medium-naive"
     fig, ax = plt.subplots(figsize=(W, 2.6))
@@ -324,7 +324,7 @@ def fig8(ctrl, coach, label):
         fontsize=7,
     )
     for ext in ("png", "pdf"):
-        fig.savefig(FIG / f"fig8_naive_recovery.{ext}", bbox_inches="tight")
+        fig.savefig(FIG / f"fig8_naive_recovery{suffix}.{ext}", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -336,21 +336,22 @@ def main() -> None:
     p.add_argument("--coach", required=True, help="runs dir of the coached arm")
     p.add_argument("--coach-label", default="LLM-PPO")
     p.add_argument("--recipe-roots", nargs="*", default=[], help="coached runs dirs for table 10")
+    p.add_argument("--suffix", default="", help="output-name suffix, e.g. _evolve4 (default: none)")
     a = p.parse_args()
     FIG.mkdir(exist_ok=True)
     TAB.mkdir(exist_ok=True)
     ctrl, coach = load_runs(ROOT / a.control), load_runs(ROOT / a.coach)
     print(f"control {len(ctrl)} runs, {a.coach_label} {len(coach)} runs")
     t6, t7 = table6(ctrl, coach, a.coach_label), table7(ctrl, coach, a.coach_label)
-    t6.to_csv(TAB / "table6_coach_per_setting.csv", index=False)
-    t7.to_csv(TAB / "table7_coach_pooled.csv", index=False)
+    t6.to_csv(TAB / f"table6_coach_per_setting{a.suffix}.csv", index=False)
+    t7.to_csv(TAB / f"table7_coach_pooled{a.suffix}.csv", index=False)
     print(t7.to_string(index=False))
     if a.recipe_roots:
         t10 = table10([ROOT / r for r in a.recipe_roots])
-        t10.to_csv(TAB / "table10_naive_recipe.csv", index=False)
+        t10.to_csv(TAB / f"table10_naive_recipe{a.suffix}.csv", index=False)
         print(t10.to_string(index=False))
-    fig7(ctrl, coach, a.coach_label)
-    fig8(ctrl, coach, a.coach_label)
+    fig7(ctrl, coach, a.coach_label, a.suffix)
+    fig8(ctrl, coach, a.coach_label, a.suffix)
     print("saved tables 6, 7, 10 and figures 7, 8")
 
 
