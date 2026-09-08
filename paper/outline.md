@@ -39,7 +39,7 @@ G 자가 진화(사전 등록 채택 기준) H 관찰 항목 I 통계(짝 t, Wil
    - 표 7 통합 n=9 (Δ, CI, t/Wilcoxon p, d) — 확보
    - 그림 7 J 학습곡선, 그림 8 naive 성공률+개입 표시 — 생성 필요
    - 표 8 random/hillclimb 절제 — **실험 대기(evolve4 종료 후 투입)**
-   - 표 9 코치 버전 진화 이력(v5→v10) — docs/coach_versions.md에서 집계
+   - 표 9 코치 버전 진화 이력(v5→v10) — paper/tables/table9_coach_versions.csv (docs/coach_versions.md §4·§6에서 수집, CI·단측 p·d는 t 기반으로 재계산; v10은 evolve4 판정 후 갱신)
    - 표 10 최초 보고 조리법 × naive 탈출 (Fisher) — 확보(9/16 vs 0/13, p=0.001)
 
 ## Ⅴ 고찰 (골격만)

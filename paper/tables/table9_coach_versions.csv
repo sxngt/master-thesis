@@ -1,0 +1,9 @@
+version,generation,parent,change,compared_with,batch,n_pairs,dJ_mean,dJ_sd,ci95_halfwidth,p_one_sided,cohens_d,verdict,note
+v5,0,-,noise-aware rollback + confirm re-eval + detrended effect ledger + phase schedule + curriculum release invariant,none,evolve (old PPO),9,+0.440,0.629,0.483,0.035,+0.70,accepted (baseline),naive escape 1/3
+v6,1 (meta-LLM),v5,STUCK protocol paragraph in system.md,v5,evolve2,9,-0.165,0.293,0.225,0.935,-0.56,rejected,driver: pooled dJ <= 0
+v7,2 (meta-LLM),v5,do not lower target_ms while J is rising (2+ reports),v5,evolve2,8,+0.221,0.535,0.447,0.140,+0.41,accepted,one naive escape drove the result
+v7,-,-,"same, re-measured on the corrected PPO stack",none,evolve3,9,+0.363,0.551,0.424,0.084 (Wilcoxon 0.020),+0.66,-,7/9 pairs improved
+v7p,2 (hand),v7,cross-run playbook + settled_reports 2 + ledger veto 3 + curriculum lock,v7,evolve3,9,+0.398,0.663,0.510,0.055,+0.60,accepted (incumbent),naive escape 3/3; vs none dJ +0.762
+v8,3 (meta-LLM),v7p,max_params 3 -> 2,v7p,evolve3,9,-0.375,0.675,0.519,0.933,-0.56,rejected,decision-layer overrides were lost (driver defect); naive escape 1/3
+v9,3 (meta-LLM),v7p,intervention cap 1 per 3 reports at success 0.2-0.8,v7p,evolve3,9,-0.237,0.515,0.396,0.898,-0.46,rejected,same driver defect; naive escape 2/3
+v10,3 (meta-LLM),v7p,release_min_success 0.3 -> 0.5,v7p,evolve4,-,-,-,-,-,-,pending,re-queued with inherited overrides
