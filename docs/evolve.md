@@ -177,6 +177,31 @@ configs/coach/versions/v6/   # 새 버전 (커밋 대상)
 로컬로 가져오기: `rsync -avz -e 'ssh -p 12888' sxngt@100.104.103.77:/mnt/sdb1/sxngt/workspace/master-thesis/data/results/evolve/ data/results/evolve/`
 (그리고 `configs/coach/versions/`).
 
+### 6.1 실시간 관찰 — `scripts/watch_evolve.py`
+
+W&B 없이 런 디렉터리(`metrics.jsonl`, `coach_log.jsonl`, `state.json`)만 읽는다.
+표준 라이브러리만 쓰므로 서버의 시스템 python3(3.8)로도 돌고, 파일은 증분으로만
+읽는다.
+
+```bash
+# 대시보드(15 s마다 갱신): 세대/현직/판정, GPU·LLM 풀 상태, 런별 step·속도·ETA·
+# PPO loss/KL/β·최근 평가 성공률/속도/J·bestJ·코치 마지막 개입, 최근 LLM 응답, 드라이버 로그
+python3 scripts/watch_evolve.py data/results/evolve3 --remote        # 로컬에서 ssh로 서버 실행
+python3 scripts/watch_evolve.py data/results/evolve3                 # 서버에서 직접
+
+# 이벤트 스트림(tail -f): 평가마다 한 줄, LLM 제안마다 진단·제안/적용 파라미터·예측 ΔJ·
+# 신뢰도·지연·토큰, 판정(kept/rolled_back, 추세 보정 효과), 크래시, 드라이버 로그
+python3 scripts/watch_evolve.py data/results/evolve3 --remote --follow
+python3 scripts/watch_evolve.py data/results/evolve3 --remote --follow --full --prompt  # 응답 원문·프롬프트까지
+python3 scripts/watch_evolve.py --run data/results/evolve3/v7/runs/<run_id> --remote    # 런 하나의 전체 이력
+
+# 기타: --history(과거 이벤트 전부 재생) --last N --interval S --no-probe --once --no-color
+```
+
+행 표시: `klstop×N`(KL 조기 종료 횟수), `nonfinite×N`(스킵된 미니배치), β ≥ 8 노란색,
+|KL| > 0.1 빨간색, `stalled?`(15분간 기록 없음), `CRASH`(잡 로그의 Traceback).
+배치 디렉터리(`data/results/coach_v5`)나 런 디렉터리를 직접 줘도 된다.
+
 ## 7. 재시작·중단
 
 - 드라이버를 죽이고 다시 실행하면 `state.json`과 `run_jobs`의 status 파일로 완료된
