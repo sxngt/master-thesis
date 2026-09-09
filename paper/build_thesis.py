@@ -8,8 +8,13 @@
 실행:  uv run python paper/build_thesis.py
 """
 
+import csv
+import re
+from pathlib import Path
+
 from docx import Document
 from docx.enum.section import WD_SECTION
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -33,6 +38,83 @@ PLACE = {
 }
 
 BODY_FONT = "신명조"
+PAPER = Path(__file__).resolve().parent
+FIG_WIDTH_CM = 13.0  # 19 cm 페이지 − 좌 3.5 − 우 2.5
+
+# 본문 자리표시자 "[Fig. 제목 — figures/이름]" / "[Table. 제목 — tables/이름.csv]".
+# 번호는 등장 순서대로 build()가 매긴다(아라비아 일련번호, 표·그림 별도).
+EMBED_RE = re.compile(r"^\[(Fig|Table)\. (.+?) — (figures|tables)/(\S+?)\]$")
+# 본문 안의 참조 "{Fig:이름}" / "{Table:이름}" → "Fig. N" / "Table N" (번호는 위 자리표시자의 등장 순서)
+REF_RE = re.compile(r"\{(Fig|Table):([^}]+)\}")
+
+# 표 셀의 내부 실행 명칭 → 논문 표기
+CELL_RENAME = {
+    "LLM-PPO (v7p, evolve4)": "LLM-PPO (v3)",
+    "LLM (v7p)": "LLM-PPO (v3)",
+    "Rough (medium), naive reward": "Naive (rough medium)",
+}
+CELL_EXACT = {
+    "flat": "Flat", "stairs": "Stairs", "rough": "Rough",
+    "ppo": "PPO", "trpo": "TRPO", "a3c": "A3C", "sac": "SAC", "td3": "TD3", "ddpg": "DDPG",
+    "": "—", "nan": "—",
+}
+
+# 표 하단 약자 풀이(규정：약자는 표 하단에 풀이)
+TABLE_NOTES = {
+    "table1_final_performance":
+        "SD, standard deviation of velocity over seeds; Attitude RMS, root-mean-square of roll and pitch; "
+        "Falls, falls per minute; Path Efficiency, straight-line distance / travelled distance. n = 3 seeds per cell.",
+    "table2_statistics":
+        "F and p from one-way ANOVA over algorithms (n = 3 seeds each); Eta Squared, effect size η²; "
+        "Tukey HSD, Tukey honestly significant difference post-hoc test (α = 0.05).",
+    "table3_learning_efficiency":
+        "Steps to 0.8 m/s, environment steps (millions) until the evaluated velocity first reached 0.8 m/s; "
+        "Censored, seeds that never reached the threshold / seeds; Normalized AUC, area under the "
+        "velocity learning curve divided by the budget.",
+    "table4_difficulty_scaling":
+        "SD, standard deviation over seeds; Falls, falls per minute. Easy / Medium / Hard follow the "
+        "terrain difficulty levels of the terrain configuration files.",
+    "table5_anymal_transfer":
+        "SD, standard deviation over seeds; Falls, falls per minute; Cost of Transport, E / (m·g·d).",
+    "coach_versions_thesis":
+        "v1–v3, the three coach versions reported in this thesis (internal iteration ranges in the first row); "
+        "n Pairs, (setting, seed) pairs against the no-coach PPO control of the same batch; ΔJ, paired "
+        "difference LLM-PPO − PPO of the objective J = success rate + 0.5 × forward velocity; CI, t-based "
+        "95 % confidence interval; d, paired Cohen's d; Naive Escape, runs that left the success-rate floor "
+        "of the naive reward / runs. The last column summarises the six meta-LLM candidates, each judged "
+        "against its incumbent (one-sided paired t).",
+    "table6_coach_per_setting_evolve4":
+        "Values are mean ± SD over n seeds of the final fixed evaluation (256 environments); Paired Δ, "
+        "LLM-PPO − PPO per seed; p, two-sided paired t-test; d, paired Cohen's d; CoT, cost of transport "
+        "E / (m·g·d); Steps to Success 0.5, environment steps (millions) until the evaluated success rate "
+        "first reached 0.5 (n counts seeds that reached it under both conditions).",
+    "table7_coach_pooled_evolve4":
+        "Nine (setting, seed) pairs pooled over the three settings; 95 % CI, t-based confidence interval "
+        "of the paired difference; p (Wilcoxon), Wilcoxon signed-rank test; d, paired Cohen's d.",
+    "coach_intervention_stats":
+        "Int., settled coach proposals (kept or rolled back) per run; Kept, share of settled proposals "
+        "not rolled back; RB, rollbacks; RS, best-snapshot restores; Clip, proposals whose applied values "
+        "differ from the proposed values because of range or step limits; Lever ↓ / ↑, decreases / "
+        "increases of the commanded speed per run; Final Cmd, commanded speed at the end of training "
+        "(mean ± SD); Steps to 0.5, median environment steps (millions) until the evaluated success rate "
+        "first reached 0.5 (runs that reached it / runs), LLM-PPO / PPO of the same batch.",
+    "coach_naive_recipe":
+        "First-Report Recipe, whether the coach's first proposal (after 2 × 10⁶ steps) lowered the "
+        "commanded speed target_ms and weakened the energy penalty; Escaped Floor, runs whose evaluated "
+        "success rate left 0 before the end of training; Fisher p, one-sided Fisher's exact test of the "
+        "escape rate between the two recipe groups (not defined when a group is empty).",
+    "table8_ablation_per_setting":
+        "Final objective J (mean ± SD over n seeds) of the no-coach PPO and the three coaches sharing the "
+        "same decision layer; Random, random coach; Hill-climb, (1+1) hill-climbing coach; LLM-PPO (v3), "
+        "the final LLM coach.",
+    "table8_ablation_contrasts":
+        "ΔJ, paired difference of the final objective J between the two conditions of each contrast; SD, "
+        "standard deviation of the paired differences; 95 % CI, t-based confidence interval; p (Wilcoxon) "
+        "is not defined for n = 3; d, paired Cohen's d.",
+    "table8_ablation_escapes":
+        "Escaped, runs whose evaluated success rate left 0 under the naive reward; Final J, objective J of "
+        "each seed at the end of training; p (Fisher), one-sided Fisher's exact test against the LLM coach.",
+}
 
 
 def set_font(run, size=10.5, bold=False, font=BODY_FONT):
@@ -48,10 +130,11 @@ def set_font(run, size=10.5, bold=False, font=BODY_FONT):
 
 
 def para(doc, text="", size=10.5, bold=False, align=WD_ALIGN_PARAGRAPH.JUSTIFY,
-         spacing=2.0, before=0, after=0, indent=None, font=BODY_FONT):
+         spacing=2.0, before=0, after=0, indent=None, font=BODY_FONT, new_page=False):
     p = doc.add_paragraph()
     p.alignment = align
     pf = p.paragraph_format
+    pf.page_break_before = new_page
     pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
     pf.line_spacing = spacing
     pf.space_before = Pt(before)
@@ -100,15 +183,145 @@ def footer_page_number(sec, show=True):
     fp._p.append(fld)
 
 
-def heading(doc, text, level=1):
+def heading(doc, text, level=1, new_page=False):
     sizes = {1: 14, 2: 12, 3: 11}
     return para(doc, text, size=sizes.get(level, 11), bold=True,
                 align=WD_ALIGN_PARAGRAPH.LEFT if level > 1 else WD_ALIGN_PARAGRAPH.CENTER,
-                before=18 if level == 1 else 12, after=8)
+                before=18 if level == 1 else 12, after=8, new_page=new_page)
 
 
-def body(doc, text):
-    return para(doc, text, indent=0.75)
+def body(doc, text, new_page=False):
+    return para(doc, text, indent=0.75, new_page=new_page)
+
+
+def caption(doc, text, before=0, after=0, new_page=False):
+    return para(doc, text, size=10, align=WD_ALIGN_PARAGRAPH.CENTER, spacing=1.5,
+                before=before, after=after, new_page=new_page)
+
+
+def embed_figure(doc, num, title, name, new_page=True):
+    """그림 1개/1면：그림(폭 13 cm) 위, 영문 제목 아래."""
+    png = PAPER / "figures" / f"{name}.png"
+    p = para(doc, align=WD_ALIGN_PARAGRAPH.CENTER, spacing=1.0, new_page=new_page)
+    p.add_run().add_picture(str(png), width=Cm(FIG_WIDTH_CM))
+    caption(doc, f"Fig. {num}. {title}", before=6)
+
+
+def _cell_text(v):
+    v = v.strip()
+    for a, b in CELL_RENAME.items():
+        v = v.replace(a, b)
+    return CELL_EXACT.get(v.lower(), v)
+
+
+def _col_widths(rows, ncol, size):
+    """열 폭(cm)：줄바꿈이 안 되는 최장 토큰(머리글은 8자 이하면 통째)에 셀 여백을 더한 폭을
+    보장하고, 남는 폭은 열별 최장 셀 길이(28자 절단)에 비례하여 배분한다. 폭이 모자라면 비례 축소."""
+    char_cm = size * 0.55 * 0.0353  # 평균 글자 폭 ≈ 0.55 em
+    need, want = [], []
+    for j in range(ncol):
+        cells = [r[j] if j < len(r) else "" for r in rows]
+        head = cells[0] if len(cells[0]) <= 8 else max(cells[0].split(), key=len)
+        # "평균 ± 표준편차", "A − B" 대비 이름은 한 줄에 유지
+        tokens = [head] + [
+            w for c in cells[1:] for w in ([c] if re.search(r" [±−] ", c) and len(c) <= 24 else c.split())
+        ]
+        need.append(max(len(t) for t in tokens) * char_cm + 0.25)  # 0.25 cm：좌우 셀 여백
+        want.append(min(40, max(len(c) for c in cells)) * char_cm)
+    total = sum(need)
+    if total >= FIG_WIDTH_CM:
+        return [Cm(FIG_WIDTH_CM * n / total) for n in need]
+    slack = [max(w - n, 0.0) for n, w in zip(need, want, strict=True)]
+    extra = FIG_WIDTH_CM - total
+    share = sum(slack) or 1.0
+    return [Cm(n + extra * sl / share) for n, sl in zip(need, slack, strict=True)]
+
+
+def embed_table(doc, num, title, name, new_page=True):
+    """표 1개/1면：영문 제목 위, 표, 하단 약자 풀이."""
+    with open(PAPER / "tables" / name, newline="", encoding="utf-8") as f:
+        rows = [[_cell_text(c) for c in r] for r in csv.reader(f)]
+    ncol = max(len(r) for r in rows)
+    size = 8 if ncol <= 6 else 7 if ncol <= 9 else 6.5
+    caption(doc, f"Table {num}. {title}", after=4, new_page=new_page)
+    tbl = doc.add_table(rows=len(rows), cols=ncol)
+    tbl.style = "Table Grid"
+    tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+    tbl.autofit = False
+    mar = OxmlElement("w:tblCellMar")  # 좌우 셀 여백 0.1 cm
+    for side in ("left", "right"):
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:w"), "57")
+        el.set(qn("w:type"), "dxa")
+        mar.append(el)
+    tbl._tbl.tblPr.append(mar)
+    widths = _col_widths(rows, ncol, size)
+    for j, col in enumerate(tbl.columns):
+        col.width = widths[j]
+    for i, r in enumerate(rows):
+        for j in range(ncol):
+            cell = tbl.cell(i, j)
+            cell.width = widths[j]
+            cp = cell.paragraphs[0]
+            cp.alignment = WD_ALIGN_PARAGRAPH.CENTER if j else WD_ALIGN_PARAGRAPH.LEFT
+            pf = cp.paragraph_format
+            pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+            pf.line_spacing = 1.0
+            pf.space_before = Pt(0)
+            pf.space_after = Pt(0)
+            set_font(cp.add_run(r[j] if j < len(r) else ""), size=size, bold=(i == 0),
+                     font="Times New Roman")
+    note = TABLE_NOTES.get(name.rsplit(".", 1)[0])
+    if note:
+        para(doc, note, size=8, spacing=1.2, before=4, font="Times New Roman")
+
+
+def number_embeds(chapters):
+    """모든 장의 자리표시자를 등장 순서대로 번호 매김：{("Fig", 이름): N, ("Table", 이름): N}."""
+    numbers, counters = {}, {"Fig": 0, "Table": 0}
+    for chapter in chapters:
+        for _, paras in chapter:
+            for t in paras:
+                m = EMBED_RE.match(t)
+                if m:
+                    kind, name = m.group(1), m.group(4).rsplit(".", 1)[0]
+                    counters[kind] += 1
+                    numbers[(kind, name)] = counters[kind]
+    return numbers
+
+
+def resolve_refs(text, numbers):
+    def sub(m):
+        kind, name = m.groups()
+        n = numbers[(kind, name)]  # 없는 이름은 KeyError로 즉시 드러난다
+        return f"Fig. {n}" if kind == "Fig" else f"Table {n}"
+    return REF_RE.sub(sub, text)
+
+
+def chapter_items(doc, paras, numbers):
+    """소제목("A. …")·본문·표/그림 자리표시자를 순서대로 배치.
+
+    표/그림은 1개당 1면：자기 면에서 시작하고, 뒤따르는 글도 새 면에서 시작한다
+    (빈 면이 생기지 않도록 문단의 page_break_before 속성으로 처리)."""
+    after_embed = heading_owns_page = False
+    for i, t in enumerate(paras):
+        m = EMBED_RE.match(t)
+        if m:
+            kind, title, _, name = m.groups()
+            num = numbers[(kind, name.rsplit(".", 1)[0])]
+            (embed_figure if kind == "Fig" else embed_table)(
+                doc, num, title, name, new_page=not heading_owns_page)
+            after_embed, heading_owns_page = True, False
+        elif len(t) < 40 and t[1:3] == ". ":
+            heading(doc, t, 3, new_page=after_embed)
+            # 새 면의 소제목 바로 뒤가 표/그림이면 제목만 남는 면이 생기지 않게 같은 면에 둔다
+            next_embed = i + 1 < len(paras) and bool(EMBED_RE.match(paras[i + 1]))
+            heading_owns_page = after_embed and next_embed
+            after_embed = False
+        else:
+            body(doc, resolve_refs(t, numbers), new_page=after_embed)
+            after_embed = False
+    return after_embed
 
 
 # ===================================================================== 본문 내용
@@ -409,7 +622,10 @@ MATERIALS = [
 "엔트로피 계수이며, 각 파라미터에는 부호를 넘지 않는 유계 범위와 개입당 변화 한도(선형 ±30%, "
 "로그 척도 ×/÷3)가 부여된다. (3) 검증：판단층이 제안을 범위·한도·단계 규칙에 따라 절단 또는 "
 "기각한 뒤 적용한다. (4) 판정：다음 평가에서 J의 변화를 검정하여 손상이면 정책과 파라미터를 "
-"개입 직전 상태로 롤백한다. 모든 보고서, 제안 원문, 판정은 실행별 기록 파일에 남긴다.",
+"개입 직전 상태로 롤백한다. 모든 보고서, 제안 원문, 판정은 실행별 기록 파일에 남긴다. "
+"이 구조를 {Fig:coach_architecture}에 도식화하였다.",
+"[Fig. Architecture of the Reward Coach and Its Decision Layer around the PPO Training Loop "
+"— figures/coach_architecture]",
 "D. 판단층",
 "판단층은 코치의 종류(LLM, 무작위, 언덕오르기)와 무관하게 공유되며 다음 장치로 구성된다. "
 "1) 잡음 인지 롤백：평가 k의 관측 J_k=J*_k+ε_k로 보고, 측정 분산(성공률의 이항 표준오차와 "
@@ -430,21 +646,35 @@ MATERIALS = [
 "추종률로 상한을 계산하여 코치에게 각 파라미터가 J에 줄 수 있는 최대 이득을 수치로 제시한다.",
 "E. LLM 코치와 실행 간 플레이북",
 "LLM 코치는 시스템 프롬프트(과제·성분·파라미터 표·규칙)와 사용자 프롬프트(보고서)의 두 "
-"템플릿으로 보고서를 구성하고, 응답 JSON을 스키마로 검증하여 실패 시 해당 개입을 폐기한다. LLM "
-"추론은 외부 API를 사용하지 않고 공개 가중치 모델 Qwen3.8-27B25)(4비트 양자화, 다중 토큰 예측 "
-"디코딩)를 GPU 3장에 1장당 1개의 독립 서버로 구동하여 수행하였으며, 응답 지연(41~87초)은 같은 "
+"템플릿으로 보고서를 구성하고, 응답 JSON을 스키마로 검증하여 실패 시 해당 개입을 폐기한다. "
+"최종 버전의 LLM 추론은 외부 API를 사용하지 않고 공개 가중치 모델 Qwen3.8-27B25)(4비트 양자화, "
+"다중 토큰 예측 디코딩)를 GPU 3장에 1장당 1개의 독립 서버로 구동하여 수행하였으며, 응답 지연(41~87초)은 같은 "
 "GPU에서 동시에 학습되는 다른 두 실행이 흡수하므로 학습 처리량 손실은 없었다. 코치의 증거는 "
 "기본적으로 현재 실행 안에서만 계산되므로, 완료된 모든 코치 실행에서 정책이 성공률 0에서 "
 "벗어난 시점과 그 전에 적용된 (파라미터, 방향) 이동, 보행 중 각 이동의 유지·롤백과 순효과를 "
 "색인한 플레이북을 매 배치 전에 재구성하여 보고서에 같은 과제의 실행 간 증거로 제시하였다.",
-"F. 무작위·언덕오르기 대조군",
+"F. 코치 버전의 구분",
+"코치는 측정 규칙, 판단층, 프롬프트의 결함을 고치며 13차례 개정되었다. 본 논문은 이 가운데 "
+"판단층의 구조가 바뀐 시점을 경계로 하여 세 버전으로 묶어 보고한다. v1(내부 개정 1~3차)은 "
+"범위·부호·단계 가드레일, 고정 허용치 0.05의 롤백, 최선 스냅샷 복원, 커리큘럼 레버로 구성된 "
+"판단층으로, LLM은 GPT-5.4(OpenAI, 미국)를 외부 API로 호출하였고 3개 설정 × 시드 10개(0~9)의 "
+"30쌍으로 측정하였다. v2(내부 4~5차)는 D절의 잡음 인지 허용치, 확인 재평가, 복원 1회 제한, 추세 "
+"제거 원장, 단계 스케줄, 복귀 불변식, 항별 개선 여지를 더한 판단층으로, LLM을 로컬 Qwen3.8-27B의 "
+"8비트 양자화 모델로 바꾸어 3개 설정 × 시드 3개(0~2)의 9쌍으로 측정하였다. v3(내부 5차 플레이북 "
+"~7차 플레이북)은 원장 거부권, 커리큘럼 잠금, 정착 효과, 실행 간 플레이북, 동기식 코치, KL 벌점 "
+"계수의 유계를 더한 최종 판단층으로, 같은 모델의 4비트 양자화·다중 토큰 예측 디코딩으로 9쌍을 "
+"측정하였다. 각 버전의 비교 대상은 같은 배치에서 같은 시드로 학습한 코치 없는 PPO이며, 배치마다 "
+"측정 규칙과 PPO 구현이 다르므로 버전 간에는 J의 절댓값이 아니라 배치 내 짝 차이 ΔJ만 비교한다. "
+"H절의 자가 진화에서 메타 LLM이 제안한 후보(내부 6차, 8~12차)는 모두 기각되었으므로 어느 "
+"버전에도 포함되지 않는다.",
+"G. 무작위·언덕오르기 대조군",
 "LLM의 기여를 개입 예산 자체의 효과와 분리하기 위하여 같은 개입 주기·파라미터 범위·변화 "
 "한도·판단층(잠금, 원장 거부권, 정착 효과 포함)을 공유하되 제안 규칙만 다른 두 대조군을 두었다. "
 "무작위 코치는 매 개입에서 파라미터 3개를 무작위로 골라 한도 내 균등 분포로 이동시키고, "
 "언덕오르기 코치는 파라미터를 순환하며 한 번에 하나를 이동시키는 (1+1) 진화 전략으로서 개선된 "
 "이동은 같은 방향을 반복하고 개선되지 않은 이동은 되돌린 뒤 방향을 바꾼다. 두 대조군은 LLM "
 "코치와 정확히 같은 목적함수 되먹임을 받는다.",
-"G. 코치 버전의 자가 진화",
+"H. 코치 버전의 자가 진화",
 "코치의 프롬프트 템플릿과 판단층 설정을 하나의 버전으로 관리하고, 세대마다 현 버전(인컴번트)"
 "과 후보 버전을 같은 3개 설정 × 3개 시드에서 학습하여 (설정, 시드) 쌍별 최종 J의 차이 ΔJ로 "
 "판정하였다. 채택 기준은 사전 등록하였다：단측 짝 t-검정 p≤0.2, 어느 설정의 평균 ΔJ도 −0.05 "
@@ -453,11 +683,11 @@ MATERIALS = [
 "검증한 뒤에만 버전이 되고 코드 변경 제안은 사람이 검토한다. 후보가 판단층 설정을 명시하지 "
 "않으면 인컴번트의 설정을 상속한다. 각 버전의 채택·기각과 근거는 변경 기록으로 남겼으며, 사람이 "
 "직접 작성한 버전(플레이북 도입, 커리큘럼 잠금)도 같은 절차로 판정하였다.",
-"H. 관찰 항목",
+"I. 관찰 항목",
 "제1부의 관찰 항목(전진 속도, 성공률, 경로 효율, 전복 빈도, 자세 요동, 운반 비용)에 더하여 "
 "목적함수 J, 성공률 0.5 최초 도달 스텝 수(학습 속도), 그리고 코치 실행에 한하여 개입 수, 롤백 "
 "수, 최초 보고 시점의 개입 조합과 성공률 0 탈출 여부, 코치의 ΔJ 예측 부호 정확도를 기록하였다.",
-"I. 자료 분석 기법",
+"J. 자료 분석 기법",
 "조건 간 비교는 (설정, 시드) 쌍의 ΔJ에 대한 짝 t-검정을 주 검정으로 하고, 정규성 가정에 "
 "의존하지 않는 Wilcoxon 부호순위 검정23)을 병기하였다. 설정별(n=3)과 3개 설정을 통합한 전체"
 "(n=9)에 대하여 평균±표준편차, ΔJ의 95% 신뢰구간, 짝 Cohen’s d를 보고하였고, 빈약 보상 "
@@ -468,45 +698,109 @@ MATERIALS = [
 ]
 
 
-# Ⅳ~Ⅵ 골격. "[…]" 문단은 자리표시자 — 표/그림은 paper/tables, paper/figures에서
-# 1개당 1면으로 삽입(제목：표는 상단, 그림은 하단, 모두 영문). 표 6~9·그림 7~8은
-# 제2부 결과가 확정되는 대로 scripts/analyze.py 산출물로 채운다.
+# Ⅳ. "[Fig. 제목 — figures/이름]" / "[Table. 제목 — tables/이름.csv]" 문단은 build()가
+# paper/figures, paper/tables에서 1개당 1면으로 삽입한다(제목：표는 상단, 그림은 하단,
+# 모두 영문; 번호는 등장 순서). 본문의 참조는 "{Fig:이름}" / "{Table:이름}"으로 쓴다.
+# Ⅴ~Ⅵ의 "[…]" 문단은 아직 자리표시자다.
 RESULTS = [
 ("1. 강화학습 알고리즘 비교", [
 "A. 지형별 최종 성능",
-"[Table 1. Final Performance of Six RL Algorithms on Three Terrains — tables/table1_final_performance.csv]",
-"[Fig. 2. Forward Velocity and Success Rate by Terrain — figures/fig2_velocity_success]",
+"[Table. Final Performance of Six RL Algorithms on Three Terrains — tables/table1_final_performance.csv]",
+"[Fig. Forward Velocity and Success Rate by Terrain — figures/fig2_velocity_success]",
 "B. 통계 검정",
-"[Table 2. ANOVA, Tukey HSD and Effect Sizes — tables/table2_statistics.csv]",
+"[Table. ANOVA, Tukey HSD and Effect Sizes — tables/table2_statistics.csv]",
 "C. 학습 곡선과 학습 효율",
-"[Fig. 1. Learning Curves — figures/fig1_learning_curves]",
-"[Table 3. Learning Efficiency：Samples and Wall-Clock Time to Threshold — tables/table3_learning_efficiency.csv]",
-"[Fig. 4. Learning Efficiency — figures/fig4_learning_efficiency]",
+"[Fig. Learning Curves — figures/fig1_learning_curves]",
+"[Table. Learning Efficiency：Samples and Wall-Clock Time to Threshold — tables/table3_learning_efficiency.csv]",
+"[Fig. Learning Efficiency — figures/fig4_learning_efficiency]",
 "D. 시드 간 재현성",
-"[Fig. 3. Seed Reliability — figures/fig3_seed_reliability]",
+"[Fig. Seed Reliability — figures/fig3_seed_reliability]",
 "E. 지형 난이도 스케일링",
-"[Table 4. Difficulty Scaling — tables/table4_difficulty_scaling.csv]",
-"[Fig. 6. Difficulty Scaling — figures/fig6_difficulty_scaling]",
+"[Table. Difficulty Scaling — tables/table4_difficulty_scaling.csv]",
+"[Fig. Difficulty Scaling — figures/fig6_difficulty_scaling]",
 "F. DDPG 실패 기전의 분해",
-"[Fig. 5. DDPG Failure Decomposition — figures/fig5_ddpg_failure_decomposition]",
+"[Fig. DDPG Failure Decomposition — figures/fig5_ddpg_failure_decomposition]",
 "G. ANYmal C 이식",
-"[Table 5. Transfer of the Protocol to ANYmal C — tables/table5_anymal_transfer.csv]",
+"[Table. Transfer of the Protocol to ANYmal C — tables/table5_anymal_transfer.csv]",
 ]),
 ("2. LLM 보상 코치", [
-"A. 설정별 PPO 대 LLM-PPO",
-"[Table 6. Paired Comparison of PPO and LLM-PPO per Setting (n=3 seeds each) — J, success rate, "
-"velocity, CoT, falls/min, path efficiency, attitude, steps to success 0.5; paired Δ, p, d]",
-"B. 통합 비교",
-"[Table 7. Pooled Paired Comparison over Three Settings (n=9) — Δ with 95% CI, paired t and Wilcoxon p, Cohen's d]",
-"[Fig. 7. Objective J during Training, PPO vs LLM-PPO, per Setting and Seed]",
-"C. 빈약 보상의 복구",
-"[Fig. 8. Success Rate during Training under the Naive Reward, with Coach Interventions Marked]",
-"D. LLM 없는 코치와의 비교",
-"[Table 8. LLM-PPO vs Random and Hill-Climbing Coaches on the Same Decision Layer (n=9 pairs) — 절제 실험 결과 대기]",
-"E. 코치 버전의 진화",
-"[Table 9. Coach Versions：Change, Paired ΔJ vs Incumbent, p, Verdict — v5, v5p, v6, v7, v7p, v8, v9, v10, …]",
-"F. 개입 분석",
-"[Table 10. First-Report Intervention Recipe and Escape from the Naive-Reward Floor (Fisher's exact test)]",
+"A. 코치 버전별 목적함수 변화",
+"세 버전의 코치는 모두 같은 배치의 코치 없는 PPO보다 높은 최종 목적함수 J를 보였다({Table:coach_versions_thesis}). "
+"v1은 30쌍에서 ΔJ +0.389(95% 신뢰구간 ±0.312, 짝 t p=0.016, Wilcoxon p=0.038, d=0.47), v2는 "
+"9쌍에서 +0.440(±0.483, p=0.069, Wilcoxon p=0.039, d=0.70), v3은 9쌍에서 +0.678(±0.626, p=0.037, "
+"Wilcoxon p=0.039, d=0.83)이었다. 빈약 보상 설정에서 성공률 0의 바닥을 벗어난 실행은 v1 8/10, "
+"v2 1/3, v3 3/3이었다. 메타 LLM이 제안한 여섯 후보는 인컴번트에 대한 ΔJ가 −0.375~−0.094로 모두 "
+"기각되었고, 그 가운데 두 후보(내부 8·9차)는 후보 생성기가 인컴번트의 판단층 설정을 상속하지 "
+"못한 결함이 있는 배치에서 판정되었다({Fig:coach_version_lineage}).",
+"[Table. Three Coach Versions Reported in This Thesis：Decision Layer, LLM, and Paired Objective Change "
+"against the Same-Batch PPO Control — tables/coach_versions_thesis.csv]",
+"[Fig. Lineage of the Coach Versions and Paired ΔJ of Each Internal Iteration — figures/coach_version_lineage]",
+"학습 중 J의 궤적({Fig:coach_objective_by_version})에서 요철 지형 상급은 세 버전 모두 LLM-PPO의 시드가 학습 후반에 "
+"1.5~1.6으로 수렴한 반면 PPO는 시드에 따라 1.6과 0.4 부근으로 갈라졌다. 계단 중급은 두 조건의 "
+"궤적이 겹쳐 버전에 따른 일관된 차이가 없었고, v1과 v3의 일부 시드는 학습 중반에 J가 급락한 뒤 "
+"회복하였다. 빈약 보상 설정의 PPO는 세 배치 모두 예산 끝까지 J≈0.12에 머물렀고, LLM-PPO의 "
+"탈출 시드는 탈출 이후 요철 지형 중급의 정상 보상과 같은 1.6~1.7에 도달하였다.",
+"[Fig. Objective J during Training under the Three Coach Versions, per Setting and Seed "
+"— figures/coach_objective_by_version]",
+"B. 최종 버전의 설정별·통합 비교",
+"최종 버전(v3)의 설정별 관찰 항목을 {Table:table6_coach_per_setting_evolve4}에 정리하였다. 요철 지형 상급에서 J는 1.069±0.600에서 "
+"1.635±0.012로 높아졌고(Δ+0.565, p=0.244, d=0.94), 전진 속도는 0.815에서 1.316 m/s(p=0.019), 운반 "
+"비용은 2.490에서 1.901로 변하였으며, 성공률 0.5 최초 도달은 PPO의 2/3 시드(17, 17×10⁶ 스텝)에 "
+"대해 LLM-PPO는 3/3 시드(13, 12, 14×10⁶ 스텝)였다. 계단 중급에서 J는 1.020±0.024에서 0.913±0.350"
+"(Δ−0.107, p=0.667), 성공률은 0.576에서 0.424로, 전복 빈도는 4.9에서 8.6/min(p=0.108), 자세 요동은 "
+"0.155에서 0.198 rad(p=0.086)로 변하였다. 빈약 보상 설정에서 PPO는 세 시드 모두 성공률 0, "
+"J 0.117이었고 LLM-PPO는 성공률 0.991, J 1.693(Δ+1.576, p<0.001), 전복 빈도 221에서 1.5/min, "
+"전진 속도 0.233에서 1.403 m/s였다.",
+"[Table. Paired Comparison of PPO and LLM-PPO (v3) per Setting — tables/table6_coach_per_setting_evolve4.csv]",
+"3개 설정 9쌍을 통합하면({Table:table7_coach_pooled_evolve4}) J는 0.735±0.553에서 1.413±0.415(Δ+0.678, 95% 신뢰구간 ±0.626, "
+"p=0.037, Wilcoxon p=0.039, d=0.83), 성공률은 0.412에서 0.797(Δ+0.385, p=0.079), 전진 속도는 0.646"
+"에서 1.232 m/s(Δ+0.586, p=0.008, d=1.16), 전복 빈도는 80.9에서 3.6/min(Δ−77.2, p=0.064), 경로 "
+"효율은 0.915에서 0.978(Δ+0.063, p=0.040)이었다. 운반 비용(1.607→1.493, p=0.500)과 자세 요동"
+"(0.152→0.146 rad, p=0.753)은 차이가 없었고, 두 조건 모두 성공률 0.5에 도달한 4쌍의 도달 스텝"
+"(21.3 대 22.1×10⁶, p=0.833)도 차이가 없었다.",
+"[Table. Pooled Paired Comparison of PPO and LLM-PPO (v3) over Three Settings (n = 9) "
+"— tables/table7_coach_pooled_evolve4.csv]",
+"C. 판단층의 개입 활동",
+"버전·설정별 개입 통계를 {Table:coach_intervention_stats}에, 개입의 처리 결과를 {Fig:coach_decision_activity}에 정리하였다. 정착된 개입은 "
+"실행당 8.0~14.7회였고 유지 비율은 85~100%였다. 롤백은 계단 중급에 집중되어 실행당 v1 1.8, "
+"v2 1.0, v3 2.0회였고, 요철 지형 상급은 0~0.7회, 빈약 보상 설정은 v1 0.8회, v2·v3 0회였다. "
+"최선 스냅샷 복원은 v1 계단에서 실행당 3.4회였으나 v2 0.3회, v3 0.7회였다. 가드레일에 의해 제안값이 "
+"절단된 개입은 실행당 0.7~3.0회였고, v3의 9개 실행에서 원장 거부권·커리큘럼 잠금·공고화 단계 "
+"동결에 의한 제안 기각은 한 건도 발생하지 않았다.",
+"[Table. Coach Intervention Statistics per Version and Setting — tables/coach_intervention_stats.csv]",
+"[Fig. Decision Events per Run under the Three Coach Versions — figures/coach_decision_activity]",
+"커리큘럼 레버(지령 속도)의 궤적({Fig:coach_curriculum_lever})에서 계단 중급의 학습 종료 시 지령 속도는 v1 0.73±0.10, "
+"v2 1.33±0.29, v3 1.27±0.32 m/s였고, 빈약 보상 설정에서는 v1 1.26±0.48, v2 0.83±0.58, v3 "
+"1.50±0.00 m/s였다. v1에서는 레버 하향(실행당 1.4~1.6회) 뒤 기준값으로의 복귀가 계단에서 "
+"일어나지 않았고, v2·v3에서는 진행률 50% 이후 복귀 단계의 상향이 계단 3.7~4.3회, 빈약 보상 "
+"3.0~4.0회 기록되었다. 계단 중급에서 성공률 0.5 최초 도달의 중앙값은 LLM-PPO가 26(v1), 24(v2), "
+"32(v3)×10⁶ 스텝, PPO가 24, 26, 27×10⁶ 스텝이었다.",
+"[Fig. Commanded-Speed Lever, Rollbacks and Restores during Training on Stairs (Medium) "
+"— figures/coach_curriculum_lever]",
+"D. 빈약 보상의 복구",
+"빈약 보상 설정의 성공률 궤적({Fig:coach_naive_recovery})에서 코치 없는 PPO는 세 버전의 배치에서 모두 예산 끝까지 "
+"성공률 0에 머물렀다. LLM-PPO는 v1에서 10개 중 8개 시드가 5~12×10⁶ 스텝에서, v2에서 3개 중 "
+"1개 시드가, v3에서 3개 시드 모두(8, 9, 18×10⁶ 스텝)가 바닥을 벗어나 예산 말에 성공률 0.9 이상에 "
+"도달하였다. 최초 보고에서 지령 속도를 낮추고 에너지 벌점을 완화한 실행은 로컬 LLM 계열 27개 "
+"가운데 21개였고 이 중 17개(0.81)가 탈출한 반면, 그 밖의 조합을 받은 6개 실행은 하나도 탈출하지 "
+"않았다(Fisher 단측 p=0.001; {Table:coach_naive_recipe}). v1의 10개 실행은 모두 같은 조합을 받았고 8개가 탈출하였다.",
+"[Fig. Success Rate during Training under the Naive Reward, with Escape from the Floor "
+"— figures/coach_naive_recovery]",
+"[Table. First-Report Intervention Recipe and Escape from the Naive-Reward Floor "
+"— tables/coach_naive_recipe.csv]",
+"E. LLM 없는 코치와의 비교",
+"같은 판단층 위에서 제안 규칙만 다른 무작위 코치와 언덕오르기 코치의 최종 J를 {Table:table8_ablation_per_setting}에, "
+"조건 간 짝 대비를 {Table:table8_ablation_contrasts}에 정리하였다. 9쌍 통합 J는 PPO 0.735±0.553, 무작위 0.577±0.605, "
+"언덕오르기 0.709±0.551, LLM-PPO 1.413±0.415였다. PPO에 대한 차이는 무작위 −0.158(95% 신뢰구간 "
+"±0.367, p=0.350), 언덕오르기 −0.026(±0.432, p=0.893)으로 차이가 없었고, LLM-PPO는 무작위보다 "
+"+0.836(±0.655, p=0.019, d=0.98), 언덕오르기보다 +0.704(±0.650, p=0.037, d=0.83) 높았다. 빈약 보상 "
+"설정에서는 LLM-PPO 3/3 시드가 탈출한 반면 PPO·무작위·언덕오르기는 9개 실행 중 하나도 탈출하지 "
+"않았다(Fisher p=0.005; {Table:table8_ablation_escapes}).",
+"[Table. Final Objective J of PPO, Random, Hill-Climbing and LLM Coaches per Setting "
+"— tables/table8_ablation_per_setting.csv]",
+"[Table. Paired Contrasts among PPO, Random, Hill-Climbing and LLM Coaches "
+"— tables/table8_ablation_contrasts.csv]",
+"[Table. Escape from the Naive-Reward Floor by Coach Condition — tables/table8_ablation_escapes.csv]",
 ]),
 ]
 
@@ -659,6 +953,8 @@ def build():
     setup_section(sec, numbering="decimal", start=1)
     footer_page_number(sec, show=True)
 
+    numbers = number_embeds([MATERIALS, RESULTS, DISCUSSION])
+    pending = False  # 직전 항목이 표/그림이면 다음 제목·문단은 새 면에서
     heading(doc, "Ⅰ. 서　　론", 1)
     for sub, paras in INTRO:
         heading(doc, sub, 2)
@@ -676,16 +972,13 @@ def build():
         ("Ⅳ. 연구성적", RESULTS),
         ("Ⅴ. 고　　찰", DISCUSSION),
     ]:
-        heading(doc, title, 1)
+        heading(doc, title, 1, new_page=pending)
+        pending = False
         for sub, paras in chapter:
-            heading(doc, sub, 2)
-            for t in paras:
-                if len(t) < 40 and t[1:3] == ". ":
-                    heading(doc, t, 3)
-                else:
-                    body(doc, t)
+            heading(doc, sub, 2, new_page=pending)
+            pending = chapter_items(doc, paras, numbers)
 
-    heading(doc, "Ⅵ. 결　　론", 1)
+    heading(doc, "Ⅵ. 결　　론", 1, new_page=pending)
     for t in CONCLUSION:
         body(doc, t)
 
@@ -696,7 +989,8 @@ def build():
 
     out = __file__.replace("build_thesis.py", "thesis.docx")
     doc.save(out)
-    print(f"saved: {out}")
+    n_fig = sum(k == "Fig" for k, _ in numbers)
+    print(f"saved: {out}  (figures {n_fig}, tables {len(numbers) - n_fig})")
 
 
 if __name__ == "__main__":

@@ -32,15 +32,17 @@ C 코치 구조(보고→제안→검증→판정) D 판단층(잡음 인지 롤
 단계, 복귀 불변식·잠금, headroom) E 로컬 LLM·플레이북 F random/hillclimb
 G 자가 진화(사전 등록 채택 기준) H 관찰 항목 I 통계(짝 t, Wilcoxon, CI, d, Fisher)
 
-## Ⅳ 연구성적 (골격만 — 현상만 기술, 해석 금지)
-1. 알고리즘 비교: 표 1~5, 그림 1~6 (paper/tables, paper/figures — 생성됨)
-2. LLM 보상 코치:
-   - 표 6 설정별 PPO vs LLM-PPO (n=3) — evolve3 수치 확보, evolve4 재현 대기
-   - 표 7 통합 n=9 (Δ, CI, t/Wilcoxon p, d) — 확보
-   - 그림 7 J 학습곡선, 그림 8 naive 성공률+개입 표시 — 생성 필요
-   - 표 8 random/hillclimb 절제 — **실험 대기(evolve4 종료 후 투입)**
-   - 표 9 코치 버전 진화 이력(v5→v10) — paper/tables/table9_coach_versions.csv (docs/coach_versions.md §4·§6에서 수집, CI·단측 p·d는 t 기반으로 재계산; v10은 evolve4 판정 후 갱신)
-   - 표 10 최초 보고 조리법 × naive 탈출 (Fisher) — 확보(9/16 vs 0/13, p=0.001)
+## Ⅳ 연구성적 (본문 작성됨 — 현상만 기술, 해석 금지)
+번호는 build_thesis.py가 등장 순서로 매긴다(본문 참조는 `{Fig:이름}` / `{Table:이름}`).
+그림 1(코치 구조도, `coach_architecture`)은 Ⅲ.4.C에 들어가므로 제1부 그림은 2~7.
+1. 알고리즘 비교: 표 1~5, 그림 2~7 (paper/tables, paper/figures — 생성됨; 본문 문장은 아직 없음)
+2. LLM 보상 코치 (내부 v1~v13을 논문 v1·v2·v3으로 축약 — Ⅲ.4.F; `paper/make_version_figures.py`):
+   - A 버전별 목적함수: 표 6 `coach_versions_thesis`, 그림 8 `coach_version_lineage`, 그림 9 `coach_objective_by_version`
+   - B v3 설정별·통합: 표 7 `table6_coach_per_setting_evolve4`, 표 8 `table7_coach_pooled_evolve4`
+   - C 판단층 개입: 표 9 `coach_intervention_stats`, 그림 10 `coach_decision_activity`, 그림 11 `coach_curriculum_lever`
+     (v3 9런에서 원장 거부권·잠금·동결 기각 0건 — 본문에 명시)
+   - D 빈약 보상 복구: 그림 12 `coach_naive_recovery`, 표 10 `coach_naive_recipe` (21/17 vs 6/0, Fisher p=0.001)
+   - E LLM 없는 코치: 표 11~13 `table8_ablation_per_setting / _contrasts / _escapes`
 
 ## Ⅴ 고찰 (골격만)
 1. 방법의 타당성·신뢰성(재료·항목·시드 수·단일 시뮬레이터·LLM 비결정성)
