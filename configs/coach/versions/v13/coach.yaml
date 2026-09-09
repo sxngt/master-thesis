@@ -1,0 +1,8 @@
+# Decision-layer overrides of coach version v13 (evolution generation 4).
+coach:
+  playbook:
+    enabled: true
+  settled_reports: 2
+  ledger_veto_obs: 3
+  curriculum_lock: true
+  max_params: 2
