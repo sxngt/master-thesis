@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 """인제대학교 대학원 학위논문 생성기 → paper/thesis.docx
 
-규정: CLAUDE.md '학위논문 작성 규정' 절. 19x26cm, 신명조 10.5pt, 줄간격 200%,
+규정: CLAUDE.md '학위논문 작성 규정' 절. 19x26cm, 신명조 10pt, 줄간격 200%,
 전문 면번호 로마 소문자 / 본문 아라비아, 항목번호 예시B(I. 1. A. 1)).
 미확정 정보는 PLACE 딕셔너리의 ○○○ 유지.
 
 본문 내용은 paper/thesis_text.py(초록·Ⅰ~Ⅵ·부록·참고문헌 dict)에서 가져온다.
 마크업：{cite:키} / {cite:키1,키2} → 어깨번호(최초 인용 순서), {Fig:이름} / {Table:이름} → 번호,
 "[Fig. 제목 — figures/이름]" / "[Table. 제목 — tables/이름.csv]" → 1개/1면 삽입,
-"[Verbatim — 경로]" → 파일 원문(고정폭). 목차·표목차·그림목차의 면번호는 2회 빌드로 얻는다
+"[Verbatim — 경로]" → 파일 원문(고정폭), "[Note. 내용]" → 직전 표/그림/원문 아래의 작은 설명(같은 면).
+목차·표목차·그림목차의 면번호는 2회 빌드로 얻는다
 (1차 docx → LibreOffice PDF → pdftotext로 제목의 면을 찾아 2차 빌드의 PAGEREF 캐시에 기록).
 
 실행:  uv run python paper/build_thesis.py
@@ -55,6 +56,9 @@ sys.path.insert(0, str(PAPER))
 import thesis_text as T  # noqa: E402
 
 FIG_WIDTH_CM = 13.0  # 19 cm 페이지 − 좌 3.5 − 우 2.5
+# 표/그림 뒤의 글을 같은 면에 이어 쓸지(True) 항상 새 면에서 시작할지(False).
+# 어느 쪽이든 표/그림은 자기 면에서 시작하고 한 면에 표/그림이 둘 이상 놓이지 않는다.
+TEXT_AFTER_EMBED = True
 
 # 본문 자리표시자 "[Fig. 제목 — figures/이름]" / "[Table. 제목 — tables/이름.csv]".
 # 번호는 등장 순서대로 build()가 매긴다(아라비아 일련번호, 표·그림 별도).
@@ -63,6 +67,9 @@ EMBED_RE = re.compile(r"^\[(Fig|Table)\. (.+?) — (figures|tables)/(\S+?)\]$")
 REF_RE = re.compile(r"\{(Fig|Table):([^}]+)\}")
 # 부록의 파일 원문 "[Verbatim — configs/…/system.md]"
 VERB_RE = re.compile(r"^\[Verbatim — (\S+)\]$")
+# 표/그림/원문 바로 아래의 설명 "[Note. 내용]" — 새 면을 만들지 않고 8.5pt로 붙인다
+NOTE_RE = re.compile(r"^\[Note\. (.+)\]$", re.S)
+BODY_SIZE = 10.0
 # 어깨번호 인용 "{cite:키}" / "{cite:키1,키2}" → 최초 인용 순서의 번호(위첨자)
 CITE_RE = re.compile(r"\{cite:([^}]+)\}")
 CITE_NUMBERS: dict[str, int] = {}
@@ -151,7 +158,7 @@ TABLE_NOTES = {
 }
 
 
-def set_font(run, size=10.5, bold=False, font=BODY_FONT):
+def set_font(run, size=BODY_SIZE, bold=False, font=BODY_FONT):
     run.font.name = font
     run.font.size = Pt(size)
     run.font.bold = bold
@@ -166,7 +173,7 @@ def set_font(run, size=10.5, bold=False, font=BODY_FONT):
 def para(
     doc,
     text="",
-    size=10.5,
+    size=BODY_SIZE,
     bold=False,
     align=WD_ALIGN_PARAGRAPH.JUSTIFY,
     spacing=2.0,
@@ -307,7 +314,7 @@ def footer_page_number(sec, show=True):
 
 def heading(doc, text, level=1, new_page=False):
     sizes = {1: 14, 2: 12, 3: 11}
-    return para(
+    p = para(
         doc,
         text,
         size=sizes.get(level, 11),
@@ -317,6 +324,8 @@ def heading(doc, text, level=1, new_page=False):
         after=8,
         new_page=new_page,
     )
+    p.paragraph_format.keep_with_next = True
+    return p
 
 
 def body(doc, text, new_page=False):
@@ -340,6 +349,7 @@ def embed_figure(doc, num, title, name, new_page=True):
     """그림 1개/1면：그림(폭 13 cm) 위, 영문 제목 아래."""
     png = PAPER / "figures" / f"{name}.png"
     p = para(doc, align=WD_ALIGN_PARAGRAPH.CENTER, spacing=1.0, new_page=new_page)
+    p.paragraph_format.keep_with_next = True  # 그림과 제목을 같은 면에
     p.add_run().add_picture(str(png), width=Cm(FIG_WIDTH_CM))
     return caption(doc, f"Fig. {num}. {title}", before=6)
 
@@ -382,6 +392,8 @@ def embed_table(doc, num, title, name, new_page=True):
         rows = [[_cell_text(c) for c in r] for r in csv.reader(f)]
     ncol = max(len(r) for r in rows)
     size = 8 if ncol <= 6 else 7 if ncol <= 9 else 6.5
+    if len(rows) > 28:  # 긴 표(부록)는 1면에 들어가도록 축소
+        size = min(size, 6.5)
     cap = caption(doc, f"Table {num}. {title}", after=4, new_page=new_page)
     tbl = doc.add_table(rows=len(rows), cols=ncol)
     tbl.style = "Table Grid"
@@ -426,8 +438,8 @@ def embed_verbatim(doc, path):
         para(
             doc,
             line.replace("{cite:", "{cite :") or " ",
-            size=8,
-            spacing=1.15,
+            size=7.5,
+            spacing=1.0,
             align=WD_ALIGN_PARAGRAPH.LEFT,
             font=MONO_FONT,
         )
@@ -487,12 +499,18 @@ class Toc:
         self._i += 1
 
 
-def chapter_items(doc, paras, numbers, toc):
+def starts_with_embed(paras):
+    return bool(paras) and bool(EMBED_RE.match(paras[0]))
+
+
+def chapter_items(doc, paras, numbers, toc, heading_on_new_page=False):
     """소제목("A. …")·본문·표/그림 자리표시자를 순서대로 배치.
 
-    표/그림은 1개당 1면：자기 면에서 시작하고, 뒤따르는 글도 새 면에서 시작한다
-    (빈 면이 생기지 않도록 문단의 page_break_before 속성으로 처리)."""
-    after_embed = heading_owns_page = False
+    표/그림은 1개당 1면：자기 면에서 시작하고, 뒤따르는 글은 TEXT_AFTER_EMBED에 따라 같은 면에
+    잇거나 새 면에서 시작한다(빈 면이 생기지 않도록 문단의 page_break_before 속성으로 처리).
+    heading_on_new_page：직전의 절 제목이 새 면에서 시작하였으면 첫 표/그림을 그 면에 둔다."""
+    after_embed = False
+    heading_owns_page = heading_on_new_page
     for i, t in enumerate(paras):
         m = EMBED_RE.match(t)
         v = VERB_RE.match(t)
@@ -503,15 +521,29 @@ def chapter_items(doc, paras, numbers, toc):
                 doc, num, title, name, new_page=not heading_owns_page
             )
             toc.mark(cap, f"{'Fig. ' if kind == 'Fig' else 'Table '}{num}. {title}")
-            after_embed, heading_owns_page = True, False
+            after_embed, heading_owns_page = not TEXT_AFTER_EMBED, False
+            next_embed = i + 1 < len(paras) and bool(EMBED_RE.match(paras[i + 1]))
+            if next_embed:  # 표/그림이 연이어 오면 다음 것은 반드시 새 면
+                after_embed = True
         elif v:
             embed_verbatim(doc, v.group(1))
             after_embed = False
+        elif NOTE_RE.match(t):
+            para(
+                doc,
+                resolve_refs(NOTE_RE.match(t).group(1), numbers),
+                size=8.5,
+                spacing=1.3,
+                before=4,
+                after=2,
+            )
+            # 설명은 표/그림과 같은 면에 두되, 뒤따르는 글은 여전히 새 면에서 시작한다
         elif is_subheading(t):
-            toc.mark(heading(doc, t, 3, new_page=after_embed), t)
-            # 새 면의 소제목 바로 뒤가 표/그림이면 제목만 남는 면이 생기지 않게 같은 면에 둔다
+            # 소제목 바로 뒤가 표/그림이면 소제목을 표/그림의 면 머리에 둔다
+            # (면 끝에 제목만 남거나, 제목만 있는 면이 생기지 않도록)
             next_embed = i + 1 < len(paras) and bool(EMBED_RE.match(paras[i + 1]))
-            heading_owns_page = after_embed and next_embed
+            toc.mark(heading(doc, t, 3, new_page=after_embed or next_embed), t)
+            heading_owns_page = next_embed
             after_embed = False
         else:
             body(doc, resolve_refs(t, numbers), new_page=after_embed)
@@ -565,7 +597,7 @@ def _collect_chapter(toc, chapter, numbers):
 
 
 def toc_line(doc, text, page, bm, indent_cm, size=11):
-    p = para(doc, "", spacing=1.6, align=WD_ALIGN_PARAGRAPH.LEFT)
+    p = para(doc, "", spacing=1.25, align=WD_ALIGN_PARAGRAPH.LEFT)
     hang = (
         1.2 if len(text) > 10 else 0.0
     )  # 짧은 항목은 내어쓰기 위치가 암묵적 탭이 되는 것을 피한다
@@ -662,7 +694,7 @@ def build(pages=None):
     doc = Document()
     st = doc.styles["Normal"]
     st.font.name = BODY_FONT
-    st.font.size = Pt(10.5)
+    st.font.size = Pt(BODY_SIZE)
     st._element.rPr.rFonts.set(qn("w:eastAsia"), BODY_FONT)
 
     numbers = number_embeds([T.MATERIALS, T.RESULTS, T.DISCUSSION])
@@ -766,8 +798,10 @@ def build(pages=None):
         toc.mark(heading(doc, title, 1, new_page=pending), title)
         pending = False
         for sub, paras in chapter:
-            toc.mark(heading(doc, sub, 2, new_page=pending), sub)
-            pending = chapter_items(doc, paras, numbers, toc)
+            # 절 제목 바로 뒤가 표/그림이면 제목을 그 표/그림의 면 머리에 둔다
+            owns = pending or starts_with_embed(paras)
+            toc.mark(heading(doc, sub, 2, new_page=owns), sub)
+            pending = chapter_items(doc, paras, numbers, toc, heading_on_new_page=owns)
 
     toc.mark(heading(doc, "Ⅵ. 결　　론", 1, new_page=pending), "Ⅵ. 결　　론")
     for t in T.CONCLUSION:
@@ -775,13 +809,21 @@ def build(pages=None):
 
     toc.mark(heading(doc, "참고문헌", 1, new_page=True), "참고문헌")
     for key, n in CITE_NUMBERS.items():
-        para(doc, f"{n}. {T.REFERENCES[key]}", spacing=1.6, after=4, align=WD_ALIGN_PARAGRAPH.LEFT)
+        para(
+            doc,
+            f"{n}. {T.REFERENCES[key]}",
+            size=9.5,
+            spacing=1.3,
+            after=3,
+            align=WD_ALIGN_PARAGRAPH.LEFT,
+        )
 
     toc.mark(heading(doc, "부　　록", 1, new_page=True), "부　　록")
     pending = False
     for sub, paras in T.APPENDIX:
-        toc.mark(heading(doc, sub, 2, new_page=pending), sub)
-        pending = chapter_items(doc, paras, numbers, toc)
+        owns = pending or starts_with_embed(paras)
+        toc.mark(heading(doc, sub, 2, new_page=owns), sub)
+        pending = chapter_items(doc, paras, numbers, toc, heading_on_new_page=owns)
     assert toc._i == len(toc.entries), (toc._i, len(toc.entries))
     return doc, numbers, toc
 
