@@ -1,0 +1,26 @@
+Contrast,Setting,n pairs,ΔJ,SD,95% CI,p (paired t),p (Wilcoxon),Cohen's d
+Random − PPO,Rough (hard),3,-0.436,0.791,± 1.965,0.441,,-0.55
+Random − PPO,Stairs (medium),3,-0.038,0.336,± 0.834,0.861,,-0.11
+Random − PPO,"Rough (medium), naive reward",3,-0.000,0.003,± 0.007,0.797,,-0.17
+Random − PPO,Rough + Stairs,6,-0.237,0.585,± 0.614,0.367,0.438,-0.40
+Random − PPO,Pooled,9,-0.158,0.478,± 0.367,0.350,0.652,-0.33
+Hill-climb − PPO,Rough (hard),3,-0.150,1.100,± 2.733,0.835,,-0.14
+Hill-climb − PPO,Stairs (medium),3,0.070,0.118,± 0.294,0.416,,0.59
+Hill-climb − PPO,"Rough (medium), naive reward",3,0.003,0.006,± 0.014,0.505,,0.47
+Hill-climb − PPO,Rough + Stairs,6,-0.040,0.710,± 0.745,0.895,1.000,-0.06
+Hill-climb − PPO,Pooled,9,-0.026,0.562,± 0.432,0.893,1.000,-0.05
+LLM (v7p) − PPO,Rough (hard),3,0.565,0.599,± 1.488,0.244,,0.94
+LLM (v7p) − PPO,Stairs (medium),3,-0.107,0.371,± 0.923,0.667,,-0.29
+LLM (v7p) − PPO,"Rough (medium), naive reward",3,1.576,0.019,± 0.048,0.000,,81.70
+LLM (v7p) − PPO,Rough + Stairs,6,0.229,0.578,± 0.607,0.376,0.312,0.40
+LLM (v7p) − PPO,Pooled,9,0.678,0.814,± 0.626,0.037,0.039,0.83
+LLM (v7p) − Random,Rough (hard),3,1.001,0.902,± 2.240,0.194,,1.11
+LLM (v7p) − Random,Stairs (medium),3,-0.069,0.037,± 0.091,0.084,,-1.87
+LLM (v7p) − Random,"Rough (medium), naive reward",3,1.576,0.017,± 0.042,0.000,,92.53
+LLM (v7p) − Random,Rough + Stairs,6,0.466,0.818,± 0.858,0.222,1.000,0.57
+LLM (v7p) − Random,Pooled,9,0.836,0.852,± 0.655,0.019,0.164,0.98
+LLM (v7p) − Hill-climb,Rough (hard),3,0.715,0.621,± 1.543,0.184,,1.15
+LLM (v7p) − Hill-climb,Stairs (medium),3,-0.177,0.421,± 1.047,0.543,,-0.42
+LLM (v7p) − Hill-climb,"Rough (medium), naive reward",3,1.573,0.022,± 0.055,0.000,,70.70
+LLM (v7p) − Hill-climb,Rough + Stairs,6,0.269,0.681,± 0.715,0.377,0.438,0.40
+LLM (v7p) − Hill-climb,Pooled,9,0.704,0.846,± 0.650,0.037,0.055,0.83

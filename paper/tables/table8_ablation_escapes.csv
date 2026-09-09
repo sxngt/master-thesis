@@ -1,0 +1,6 @@
+Condition,Escaped / n,Final J,p (Fisher vs LLM)
+PPO,0 / 3,0.116 / 0.118 / 0.116,0.100
+Random,0 / 3,0.117 / 0.114 / 0.117,0.100
+Hill-climb,0 / 3,0.119 / 0.126 / 0.113,0.100
+LLM (v7p),3 / 3,1.711 / 1.674 / 1.692,
+All LLM-free (PPO + Random + Hill-climb),0 / 9,,0.005
