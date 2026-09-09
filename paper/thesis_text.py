@@ -129,22 +129,27 @@ INTRO = [
             "{cite:lee2020}은 고유수용감각만으로 험지를 주파하는 정책을, Miki 등{cite:miki2022}은 외부감각을 "
             "융합한 야지 보행을, Kumar 등{cite:kumar2021rma}은 환경 파라미터의 온라인 추정에 의한 신속 적응을 "
             "보고하였다. 최근에는 파쿠르 수준의 보행{cite:hoeller2024,zhuang2023,cheng2024}과 변형 지반 보행"
-            "{cite:choi2023}까지 범위가 넓어졌다. Rudin 등{cite:rudin2022}은 GPU 병렬 시뮬레이션"
+            "{cite:choi2023}까지 범위가 넓어졌다. Rudin 등{cite:rudin2022}은 그래픽 처리 장치(graphics processing unit, 이하 GPU라 함) 병렬 시뮬레이션"
             "{cite:makoviychuk2021}으로 수천 개의 환경을 동시에 구동하여 수 분 내에 보행을 학습하였으며, 본 "
             "연구의 학습 체계는 이 방식을 따른다. 시뮬레이션과 실기의 차이는 동역학 무작위화{cite:peng2018}와 "
             "영역 무작위화{cite:tobin2017}로 줄여 왔다.",
             "B. 알고리즘 비교와 재현성",
-            "이들 성과의 대부분은 근사 정책 최적화(PPO){cite:schulman2017ppo} 한 알고리즘에 기초한다. 신뢰영역 "
-            "기반의 TRPO{cite:schulman2015trpo}, 최대 엔트로피 기반의 SAC{cite:haarnoja2018sac}, 결정론적 정책 "
-            "경사{cite:silver2014} 계열의 DDPG{cite:lillicrap2016ddpg}와 TD3{cite:fujimoto2018td3}, 비동기 병렬 "
-            "학습의 A3C{cite:mnih2016a3c}는 원리가 서로 다르지만, 험지 보행에서 이들을 동일 조건으로 비교한 "
+            "이들 성과의 대부분은 근사 정책 최적화(proximal policy optimization, 이하 PPO라 함)"
+            "{cite:schulman2017ppo} 한 알고리즘에 기초한다. 신뢰영역 정책 최적화(trust region policy "
+            "optimization, 이하 TRPO라 함){cite:schulman2015trpo}, 최대 엔트로피 기반의 연성 행위자-비평자"
+            "(soft actor-critic, 이하 SAC라 함){cite:haarnoja2018sac}, 결정론적 정책 경사{cite:silver2014} 계열의 "
+            "심층 결정론적 정책 경사(deep deterministic policy gradient, 이하 DDPG라 함){cite:lillicrap2016ddpg}와 "
+            "쌍둥이 지연 심층 결정론적 정책 경사(twin delayed deep deterministic policy gradient, 이하 TD3라 함)"
+            "{cite:fujimoto2018td3}, 비동기 이점 행위자-비평자(asynchronous advantage "
+            "actor-critic, 이하 A3C라 함){cite:mnih2016a3c}는 원리가 서로 다르지만, 험지 보행에서 이들을 동일 "
+            "조건으로 비교한 "
             "연구는 드물다. 일반 연속 제어 벤치마크의 비교{cite:duan2016}는 접촉 동역학과 지형 난이도 축을 "
             "다루지 않는다. 시드에 따른 성능 변동이 결론을 좌우할 수 있다는 지적{cite:henderson2018}과 소수 "
             "시드 비교의 검정력 분석{cite:colas2018,agarwal2021}은 시드 반복과 통계 검정을 갖춘 비교의 "
             "필요성을 보여 준다. 보행 학습에서는 에너지 최소화가 보행 양식의 창발을 유도한다는 보고"
             "{cite:fu2021}와 주기적 보상 구성{cite:siekmann2021}처럼 보상의 세부가 결과를 좌우한다는 지견도 "
             "있다.",
-            "C. 보상 설계의 자동화와 LLM",
+            "C. 보상 설계의 자동화와 언어 모델",
             "보상 형성의 이론적 근거{cite:ng1999}가 있음에도 보행 보상은 속도 추종, 에너지, 자세, 접촉 등 "
             "십여 개 성분의 가중합으로 구성되고, 그 가중치는 연구자가 반복 시행으로 조정하며 그 과정은 "
             "논문에 기록되지 않는 경우가 많다. 잘못 설계된 보상은 의도와 다른 행동을 최적으로 만드는 보상 "
@@ -203,13 +208,9 @@ INTRO = [
             "후속 과제로 둔다. 로봇에는 전방 목표 속도 1.0 m/s의 지령이 주어지며, 20초 안에 시작점으로부터 "
             "5 m 이상 진행하면 과제 성공으로 정의한다. 시드는 학습 시드를 뜻하며 지형 생성과 초기 상태의 "
             "난수는 학습 시드로부터 유도된다.",
-            "근사 정책 최적화(proximal policy optimization)는 PPO, 신뢰영역 정책 최적화(trust region policy "
-            "optimization)는 TRPO, 연성 행위자-비평자(soft actor-critic)는 SAC, 쌍둥이 지연 심층 결정론적 "
-            "정책 경사(twin delayed deep deterministic policy gradient)는 TD3, 심층 결정론적 정책 경사(deep "
-            "deterministic policy gradient)는 DDPG, 비동기 이점 행위자-비평자(asynchronous advantage "
-            "actor-critic)는 A3C로 약칭한다. 일반화 이점 추정(generalized advantage estimation, 이하 GAE라 함), "
-            "Kullback-Leibler 발산(이하 KL 발산이라 함), 운반 비용(cost of transport, 이하 CoT라 함), 분산분석"
-            "(analysis of variance, 이하 ANOVA라 함), 신뢰구간(confidence interval, 이하 CI라 함)도 약칭한다. "
+            "일반화 이점 추정(generalized advantage estimation, 이하 GAE라 함), Kullback-Leibler 발산(이하 KL "
+            "발산이라 함), 운반 비용(cost of transport, 이하 CoT라 함), 분산분석(analysis of variance, 이하 "
+            "ANOVA라 함), 신뢰구간(confidence interval, 이하 CI라 함)을 약칭한다. "
             "현재 정책의 표본만으로 갱신하는 알고리즘을 on-policy, 과거 표본을 재생 버퍼에 저장하여 "
             "재사용하는 알고리즘을 off-policy라 한다. 학습 도중 보상 파라미터를 조정하는 외부 절차를 보상 "
             "코치(이하 코치라 함), 코치가 한 보고 시점에 적용한 파라미터 변경의 집합을 개입, 고정 평가에서 "
@@ -285,7 +286,7 @@ MATERIALS = [
             "스위스){cite:hutter2016}의 공식 자산(질량 약 50 kg, 토크 한계 80 N·m)을 사용하고 행동 배율만 "
             "0.5로 조정하였다.",
             "B. 지형",
-            "지형은 평지, 계단, 불규칙 요철의 3종이다. 계단은 피라미드형으로 단 높이/깊이를 하급 5/30 cm, "
+            "지형은 평지(flat), 계단(stairs), 불규칙 요철(rough)의 3종이며 표에서는 이 영문 명칭을 쓴다. 계단은 피라미드형으로 단 높이/깊이를 하급 5/30 cm, "
             "중급 12/28 cm, 상급 20/25 cm로 하였고 로봇은 중앙 평탄부에서 내려가는 방향으로 진행한다. 불규칙 "
             "요철은 격자 높이장에 하급 ±2.5 cm, 중급 ±5 cm, 상급 ±8 cm의 균일 무작위 높이를 약 20 cm 간격으로 "
             "부여한다. 정지 마찰계수는 평지 1.0, 계단·요철 0.8이고 동마찰계수는 정지 마찰계수 −0.2이다. "
@@ -293,7 +294,7 @@ MATERIALS = [
             "다루었다.",
             "C. 연구 대상의 규정",
             "비교 대상은 정책 경사 계열의 대표성이 확립된 6종(PPO, TRPO, A3C, SAC, TD3, DDPG)이며 모두 동일한 "
-            "인터페이스로 구현하였다. A3C는 다수의 비동기 CPU 작업자가 각자의 환경 사본에서 경사를 계산하여 "
+            "인터페이스로 구현하였다. A3C는 다수의 비동기 중앙 처리 장치(이하 CPU라 함) 작업자가 각자의 환경 사본에서 경사를 계산하여 "
             "공유 파라미터를 갱신하는 설계이므로, 수천 개의 환경이 하나의 GPU 텐서 배치로 동기 진행되는 "
             "벡터화 시뮬레이터에서는 그 병렬 구조가 성립하지 않는다. 본 연구는 이 비호환을 결과의 일부로 "
             "보고하고 A3C를 학습에서 제외하였다. DDPG는 평지 예비 학습에서 두 탐험 변형 모두 보행을 얻지 "
@@ -337,7 +338,7 @@ MATERIALS = [
             "이점을 추정하여 공유 파라미터를 갱신한다.",
             "off-policy 계열은 재생 버퍼의 전이로 행동 가치 Q를 벨만 목표에 회귀시키고 정책은 Q를 최대화하도록 "
             "갱신한다. DDPG{cite:lillicrap2016ddpg}는 결정론적 정책 경사{cite:silver2014}로 정책을 갱신하고, "
-            "탐험은 행동에 Ornstein-Uhlenbeck 잡음{cite:uhlenbeck1930}을 더하거나 정책 파라미터에 잡음을 "
+            "탐험은 행동에 Ornstein-Uhlenbeck(이하 OU라 함) 잡음{cite:uhlenbeck1930}을 더하거나 정책 파라미터에 잡음을 "
             "주입{cite:plappert2018}하여 얻으며, 목표망은 지수 이동 평균(τ=0.005)으로 갱신한다{cite:mnih2015}. "
             "TD3{cite:fujimoto2018td3}는 DDPG의 세 결함을 고친다. 함수 근사 오차에 의한 Q의 "
             "과대추정{cite:thrun1993,vanhasselt2016}은 두 비평자의 최솟값을 목표로 쓰는 절단 이중 Q 학습으로, "
@@ -391,7 +392,7 @@ MATERIALS = [
             "G. 자료 분석과 재현성",
             "조합별 성적은 시드 3회의 평균과 표준편차로 요약하고 t-분포 기반 95% CI{cite:student1908}를 "
             "병기하였다. 알고리즘 간 차이는 일원배치 ANOVA{cite:fisher1925}로 검정하고 효과크기 η²을 "
-            "산출하였으며, 유의한 경우 Tukey HSD 사후검정{cite:tukey1949}과 쌍별 Cohen’s d{cite:cohen1988}를 "
+            "산출하였으며, 유의한 경우 Tukey HSD(honestly significant difference) 사후검정{cite:tukey1949}과 쌍별 Cohen’s d{cite:cohen1988}를 "
             "적용하였다. 유의수준은 0.05이다. 난수 발생원은 단일 진입점에서 고정하였고, 각 학습 실행은 해석이 "
             "완료된 설정 파일, 학습 곡선, 정책 점검점을 저장한다. 모든 표와 그림은 저장된 원자료로부터 "
             "스크립트로 재생성되며, 제1부의 학습 이력 전체는 부록 F에 수록하였다.",
@@ -427,7 +428,7 @@ MATERIALS = [
             "빈도, CoT), 보상 성분별 기여도, 보행 기술자(유각기 시간, 접촉 패턴), PPO 학습 통계(KL 발산, "
             "엔트로피, 절단 비율, 학습률), J의 궤적과 잡음 추정치, 개입 이력과 그 효과, 학습곡선 적합에 의한 "
             "예산 말 예상 J, 항별 개선 여지를 하나의 문서로 정리한다. (2) 제안：코치가 보고서를 읽고 조정 대상 "
-            "파라미터 최대 3개의 새 값, 진단, 예상 ΔJ와 확신도를 구조화된 JSON으로 제안한다. 조정 대상은 보상 "
+            "파라미터 최대 3개의 새 값, 진단, 예상 ΔJ와 확신도를 구조화된 JSON(JavaScript object notation) 형식으로 제안한다. 조정 대상은 보상 "
             "성분 가중치 11개(지령 속도 포함), 유각기 목표 시간, PPO의 학습률과 엔트로피 계수의 14개이며, 각 "
             "파라미터에 부호를 넘지 않는 유계 범위와 개입당 변화 한도(선형 척도 ±30%, 로그 척도 ×/÷3)가 "
             "있다(부록 C). (3) 검증：판단층이 제안을 범위·한도·단계 규칙에 따라 절단 또는 기각한다. (4) "
@@ -471,7 +472,7 @@ MATERIALS = [
             "수록하였다. 실행 체계의 구성 요소와 의존 관계를 {Fig:coach_system_dependency}에 나타내었다. 배치 "
             "드라이버는 (설정, 시드, 조건)의 작업 목록을 시뮬레이션 GPU에 3개씩 배정하고, 각 실행은 PPO "
             "학습기, 고정 평가기, 제안자(LLM 요청기 또는 무작위·언덕오르기 규칙), 판단층으로 구성된다. LLM "
-            "추론은 외부 API를 쓰지 않고 공개 가중치 모델 Qwen3.8-27B{cite:yang2025qwen3}(4비트 사후 "
+            "추론은 외부 응용 프로그램 인터페이스(application programming interface, 이하 API라 함)를 쓰지 않고 공개 가중치 모델 Qwen3.8-27B{cite:yang2025qwen3}(4비트 사후 "
             "양자화{cite:frantar2023}, 다중 토큰 예측 디코딩{cite:gloeckle2024})를 GPU 3장에 1장당 1개의 독립 "
             "서버로 구동하여 수행하였다. 한 실행은 한 번에 하나의 요청만 보내며, 응답 지연(41~87초)은 같은 "
             "GPU에서 동시에 학습되는 다른 두 실행이 흡수하므로 처리량 손실은 없었다. 각 실행은 설정 파일, "
@@ -503,14 +504,14 @@ MATERIALS = [
             "개선되지 않은 이동은 되돌린 뒤 방향을 바꾼다. 두 대조군은 LLM 코치와 같은 목적함수 되먹임을 "
             "받는다.",
             "H. 코치 버전의 자가 진화",
-            "코치의 프롬프트 템플릿과 판단층 설정을 하나의 버전으로 관리하고, 세대마다 현 버전(인컴번트)과 "
+            "코치의 프롬프트 템플릿과 판단층 설정을 하나의 버전으로 관리하고, 세대마다 현행 버전(incumbent)과 "
             "후보 버전을 같은 3개 설정 × 3개 시드에서 학습하여 (설정, 시드) 쌍별 최종 J의 차이 ΔJ로 "
             "판정하였다({Fig:coach_self_evolution}). 채택 기준은 사전에 등록하였다：단측 짝 t-검정 p≤0.2, 어느 "
             "설정의 평균 ΔJ도 −0.05 미만이 아닐 것, 유효 쌍 6개 이상. 후보는 메타 LLM(코치와 같은 모델)이 "
-            "인컴번트의 측정 결과, 개입 진단, 예측 보정치, 정체 실행 요약을 읽고 제안하되, 자리표시자·파라미터 "
+            "현행 버전의 측정 결과, 개입 진단, 예측 보정치, 정체 실행 요약을 읽고 제안하되, 자리표시자·파라미터 "
             "이름·범위를 검증한 뒤에만 버전이 되고 코드 변경 제안은 사람이 검토한다. 후보가 판단층 설정을 "
-            "명시하지 않으면 인컴번트의 설정을 상속한다. 사람이 직접 작성한 버전(플레이북 도입, 커리큘럼 "
-            "잠금)도 같은 기준으로 판정하였다. 채택된 후보는 다음 세대의 인컴번트가 되고, 기각된 후보는 그 "
+            "명시하지 않으면 현행 버전의 설정을 상속한다. 사람이 직접 작성한 버전(플레이북 도입, 커리큘럼 "
+            "잠금)도 같은 기준으로 판정하였다. 채택된 후보는 다음 세대의 현행 버전가 되고, 기각된 후보는 그 "
             "측정 결과와 함께 이력에 남아 다음 후보 생성의 입력이 된다.",
             "[Fig. Self-Evolution Loop of the Coach Version：Measurement, Candidate Generation, Pre-Registered "
             "Acceptance, and Feedback of Rejected Candidates — figures/coach_self_evolution]",
@@ -609,9 +610,9 @@ RESULTS = [
             "보였다({Table:coach_versions_thesis}). v1은 30쌍에서 ΔJ +0.389(95% 신뢰구간 ±0.312, 짝 t p=0.016, "
             "Wilcoxon p=0.038, d=0.47), v2는 9쌍에서 +0.440(±0.483, p=0.069, Wilcoxon p=0.039, d=0.70), v3은 "
             "9쌍에서 +0.678(±0.626, p=0.037, Wilcoxon p=0.039, d=0.83)이었다. 빈약 보상 설정에서 성공률 0의 "
-            "바닥을 벗어난 실행은 v1 8/10, v2 1/3, v3 3/3이었다. 메타 LLM이 제안한 여섯 후보는 인컴번트에 "
+            "바닥을 벗어난 실행은 v1 8/10, v2 1/3, v3 3/3이었다. 메타 LLM이 제안한 여섯 후보는 현행 버전에 "
             "대한 ΔJ가 −0.375~−0.094로 모두 기각되었고, 그 가운데 두 후보(내부 8·9차)는 후보 생성기가 "
-            "인컴번트의 판단층 설정을 상속하지 못한 결함이 있는 배치에서 "
+            "현행 버전의 판단층 설정을 상속하지 못한 결함이 있는 배치에서 "
             "판정되었다(부록 D).",
             "[Table. Three Coach Versions Reported in This Thesis：Decision Layer, LLM, and Paired Objective Change "
             "against the Same-Batch PPO Control — tables/coach_versions_thesis.csv]",
@@ -779,7 +780,7 @@ DISCUSSION = [
             "알고리즘의 약 2배)으로 수렴하였다. 요철 상급(±8 cm)에서 SAC의 전진 속도가 0.09 m/s로 사실상 "
             "정지한 반면 PPO·TRPO는 전복을 감수하며 0.56~0.60 m/s로 전진한 것은, 최대 엔트로피 목적 아래에서 "
             "전복 벌점의 기대값이 속도 보상의 기대값을 넘을 때 보수적 정책이 최적이 되기 때문으로 "
-            "해석된다. 지형이 어려워질수록 SAC의 강인성은 정지로, on-policy 계열의 공격성은 낙상으로 "
+            "해석된다. 지형이 어려워질수록 SAC의 강인성은 정지로, on-policy 계열의 공격성은 전복으로 "
             "나타난다.",
             "B. 재현성과 학습 효율",
             "평지·계단 하급에서 PPO의 시드 간 표준편차(0.006~0.008 m/s)가 SAC·TD3의 30~50분의 1이었던 것은 "
@@ -872,7 +873,7 @@ DISCUSSION = [
             "있는 효과의 하한은 약 0.5이므로 판단층 파라미터의 미세 조정이 주는 작은 효과는 이 실험 설계로 "
             "판정할 수 없다. 메타 LLM의 후보가 나빴다기보다 후보의 효과가 측정 잡음 아래에 있었다고 보는 "
             "것이 타당하며, 자가 진화 루프의 병목은 후보 생성이 아니라 판정 비용이었다. 두 후보(내부 "
-            "8·9차)가 인컴번트의 판단층 설정을 상속하지 못한 결함 있는 배치에서 판정된 사건은, 자동 진화 "
+            "8·9차)가 현행 버전의 판단층 설정을 상속하지 못한 결함 있는 배치에서 판정된 사건은, 자동 진화 "
             "루프에 변경되지 않아야 할 내용을 검증하는 절차가 필요함을 보여 준다. 채택 기준을 사전 "
             "등록하였으므로 이 결함은 기각 결과를 뒤집는 데 쓰이지 않았다.",
         ],
@@ -971,7 +972,7 @@ APPENDIX = [
             "— tables/appD_coach_history.csv]",
             "[Note. 사전 등록된 채택 기준으로 판정된 내부 개정(5차 이후)의 전체 이력이다. 1~4차(GPT-5.4 "
             "배치)는 본문의 코치 버전 표에 v1으로 요약되어 있다. ΔJ는 같은 배치의 비교 대상에 대한 (설정, "
-            "시드) 쌍 차이이며, 8·9차는 후보 생성기가 인컴번트의 판단층 설정을 상속하지 못한 결함 있는 "
+            "시드) 쌍 차이이며, 8·9차는 후보 생성기가 현행 버전의 판단층 설정을 상속하지 못한 결함 있는 "
             "배치에서 판정되었다.]",
         ],
     ),
@@ -1025,11 +1026,11 @@ REFERENCES = {
     "peng2018": "Peng XB, Andrychowicz M, Zaremba W, et al. Sim-to-real transfer of robotic control with dynamics randomization. Proc IEEE Int Conf Robot Autom, 2018：3803~3810.",
     "tan2018": "Tan J, Zhang T, Coumans E, et al. Sim-to-real：learning agile locomotion for quadruped robots. Proc Robot Sci Syst, 2018.",
     "tobin2017": "Tobin J, Fong R, Ray A, et al. Domain randomization for transferring deep neural networks from simulation to the real world. Proc IEEE/RSJ Int Conf Intell Robot Syst, 2017：23~30.",
-    "fu2021": "Fu Z, Kumar A, Malik J, et al. Minimizing energy consumption leads to the emergence of gaits in legged robots. Proc Conf Robot Learn, 2021, 164：928~937.",
+    "fu2021": "Fu Z, Kumar A, Malik J, et al. Minimizing energy consumption leads to the emergence of gaits in legged robots. Proc Conf Robot Learn, 2022, 164：928~937.",
     "siekmann2021": "Siekmann J, Godse Y, Fern A, et al. Sim-to-real learning of all common bipedal gaits via periodic reward composition. Proc IEEE Int Conf Robot Autom, 2021：7309~7315.",
     "margolis2022": "Margolis GB, Agrawal P. Walk these ways：tuning robot control for generalization with multiplicity of behavior. Proc Conf Robot Learn, 2022, 205：22~31.",
     "smith2023": "Smith L, Kew JC, Li T, et al. Learning and adapting agile locomotion skills by transferring experience. Proc Robot Sci Syst, 2023.",
-    "coumans2016": "Coumans E, Bai Y. PyBullet, a Python module for physics simulation for games, robotics and machine learning. 2016：http://pybullet.org.",
+    "coumans2016": "Coumans E, Bai Y. PyBullet, a Python module for physics simulation for games, robotics and machine learning. http://pybullet.org, 2016.",
     "koenig2004": "Koenig N, Howard A. Design and use paradigms for Gazebo, an open-source multi-robot simulator. Proc IEEE/RSJ Int Conf Intell Robot Syst, 2004, 3：2149~2154.",
     # --- 강화학습 알고리즘
     "sutton2018": "Sutton RS, Barto AG. Reinforcement learning：an introduction. 2nd ed. Cambridge, MIT Press, 2018：1~552.",
