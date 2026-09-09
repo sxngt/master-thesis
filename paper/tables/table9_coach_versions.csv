@@ -6,4 +6,7 @@ v7,-,-,"same, re-measured on the corrected PPO stack",none,evolve3,9,+0.363,0.55
 v7p,2 (hand),v7,cross-run playbook + settled_reports 2 + ledger veto 3 + curriculum lock,v7,evolve3,9,+0.398,0.663,0.510,0.055,+0.60,accepted (incumbent),naive escape 3/3; vs none dJ +0.762
 v8,3 (meta-LLM),v7p,max_params 3 -> 2,v7p,evolve3,9,-0.375,0.675,0.519,0.933,-0.56,rejected,decision-layer overrides were lost (driver defect); naive escape 1/3
 v9,3 (meta-LLM),v7p,intervention cap 1 per 3 reports at success 0.2-0.8,v7p,evolve3,9,-0.237,0.515,0.396,0.898,-0.46,rejected,same driver defect; naive escape 2/3
-v10,3 (meta-LLM),v7p,release_min_success 0.3 -> 0.5,v7p,evolve4,-,-,-,-,-,-,pending,re-queued with inherited overrides
+v10,3 (meta-LLM),v7p,release_min_success 0.3 -> 0.5,v7p,evolve4,9,-0.180,0.532,0.409,0.829,-0.34,rejected,inherited overrides restored; naive escape 2/3; stairs +/-0
+v11,4 (meta-LLM),v7p,raise-rate rule (tracking < 0.8 and success < 0.85),v7p,evolve4,9,-0.143,0.545,0.419,0.773,-0.26,rejected,naive escape 2/3 (seed 1 floor); stairs +0.099
+v12,5 (meta-LLM),v7p,noise_z 2.0 -> 2.5,v7p,evolve4,9,-0.094,0.593,0.455,0.676,-0.16,rejected,naive escape 2/3 (seed 1 floor); stairs +0.266 with 0.3 target ramp
+v13,6 (meta-LLM),v7p,max_params 3 -> 2,v7p,evolve4,-,-,-,-,-,-,not run,driver stopped after v12 verdict (3 runs killed); v13 == v8 change
