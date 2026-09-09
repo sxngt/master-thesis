@@ -1,4 +1,4 @@
-# 논문 구성 (2026-09-09 개정 — 전문 작성 완료, 약 120면)
+# 논문 구성 (2026-09-09 2차 개정 — 82면으로 압축, 학술 문체 정리)
 
 인제대학교 규정 순서(CLAUDE.md): 표지 → 표제지 → 인준서 → 목차(+표·그림 목차) →
 국문초록 → 영문초록 → Ⅰ 서론 → Ⅱ 연구목적 → Ⅲ 연구재료 및 방법 → Ⅳ 연구성적 →
@@ -10,6 +10,12 @@
   - 표·그림은 `[Table. 영문 제목 — tables/x.csv]`, `[Fig. 영문 제목 — figures/x.png]`
     자리표시자 → 등장 순서 번호(본문 1…, 부록 A1…); 본문 참조는 `{Table:x}`/`{Fig:x}`
   - 부록 원문 삽입: `[Verbatim — 저장소 상대경로]` (고정폭)
+  - 표/그림/원문 바로 아래 설명: `[Note. 내용]` (8.5pt, 같은 면)
+  - 본문 10pt·줄간격 200%. 표/그림은 항상 새 면에서 시작하고 한 면에 하나만 두며,
+    뒤따르는 글은 `TEXT_AFTER_EMBED=True`로 같은 면에 이어 쓴다(False로 두면 표/그림만
+    있는 면이 되어 약 13면 증가). 절 제목 바로 뒤가 표/그림이면 제목을 그 면 머리에 둔다.
+  - 파이프라인 구조도 5종(Ⅲ.4): `paper/make_pipeline_figures.py` (architecture,
+    intervention_cycle, decision_flow, system_dependency, self_evolution)
   - 목차 면번호: 1차 생성 → LibreOffice PDF → pdftotext로 면을 찾아 2차 생성
     (본문은 PAGEREF 필드, 전문부 로마 숫자는 고정 문자열)
 - 부록 표 생성: `paper/make_appendix_tables.py` (appA~appD csv)
@@ -49,3 +55,11 @@ v1 = 내부 v3 (GPT-5.4, n=30), v2 = 내부 v5 (Qwen 8-bit, n=9), v3 = 내부 v7
 
 표·그림은 scripts/analyze.py + analysis/plots.py + paper/make_*.py 산출물만 사용(재현 가능),
 표는 영문·제목 상단, 그림은 영문·제목 하단, 1개당 1면.
+
+## 문체·분량 (2차 개정에서 확정)
+- 목표 분량 약 80면(현재 82면: 전문부 13, 본문 53, 참고문헌 6, 부록 9). 초록 국문 1면·영문 2면.
+- 문체: 짧은 서술문, 비유·과장·수식어 배제. 성적 장은 현상만, 고찰은 ①방법 타당성
+  ②해석 ③미해석·후속 순. 통계량(n, mean±sd, p, W, d, Fisher, Holm)은 압축해도 유지.
+- 같은 자료의 표·그림 중복 제시 금지 규정에 따라 제거한 그림·표: fig2_velocity_success,
+  fig3, fig4, fig6, coach_decision_activity, table8_ablation_per_setting,
+  table8_ablation_escapes, coach_version_lineage(→ 부록 D 표로 대체).
