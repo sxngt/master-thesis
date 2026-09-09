@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -171,27 +172,38 @@ def coach_runs() -> None:
     _write("appC_coach_runs.csv", rows)
 
 
+THESIS_VERSION = {"v5": "v2", "v7p": "v3"}  # internal revisions that became thesis versions
+
+
+def _rev(name: str) -> str:
+    """Internal version name -> revision label used in the thesis (v7p -> #7p)."""
+    return re.sub(r"^v(\d+p?)$", r"#\1", name)
+
+
 def coach_history() -> None:
-    """Nine columns: parent and comparison target are folded into Change / Note."""
+    """Nine columns; internal names appear only as revision numbers (#5, #7p, ...)."""
     rows = []
     with (TAB / "table9_coach_versions.csv").open() as f:
         for r in csv.DictReader(f):
             dj = r["dJ_mean"] if r["dJ_sd"] in ("-", "") else f"{r['dJ_mean']}±{r['dJ_sd']}"
-            change, note = r["change"], r["note"]
+            change, note, verdict = r["change"], r["note"], r["verdict"]
             if r["parent"] not in ("-", ""):
-                change = f"from {r['parent']}: {change}"
+                change = f"from {_rev(r['parent'])}: {change}"
             if r["compared_with"] != r["parent"]:
-                note = f"vs {r['compared_with']}; {note}"
+                note = f"vs {_rev(r['compared_with'])}; {note}"
+            if r["version"] in THESIS_VERSION and verdict.startswith("accepted"):
+                verdict = f"accepted (thesis {THESIS_VERSION[r['version']]})"
+            note = re.sub(r"\bv(\d+p?)\b", r"#\1", note)
             rows.append(
                 {
-                    "Version": r["version"],
+                    "Revision": _rev(r["version"]),
                     "Gen.": r["generation"].replace("meta-LLM", "LLM"),
                     "Change": change,
                     "n": r["n_pairs"],
                     "ΔJ (mean±SD)": dj,
                     "p": r["p_one_sided"].replace(" (Wilcoxon ", "; W ").replace(")", ""),
                     "d": r["cohens_d"],
-                    "Verdict": r["verdict"],
+                    "Verdict": verdict,
                     "Note": note,
                 }
             )

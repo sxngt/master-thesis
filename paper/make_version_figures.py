@@ -84,7 +84,7 @@ VERSIONS = [
         "key": "v1",
         "label": "v1",
         "title": "v1: fixed-threshold guard",
-        "internal": "v1–v3",
+        "internal": "#1–#3",
         "dates": "Sep 4–5",
         "llm": "GPT-5.4 (API)",
         "coach": ("data/results/coach_v3/runs", "llm"),
@@ -99,7 +99,7 @@ VERSIONS = [
         "key": "v2",
         "label": "v2",
         "title": "v2: statistical decision layer",
-        "internal": "v4–v5",
+        "internal": "#4–#5",
         "dates": "Sep 5–8",
         "llm": "Qwen3.8-27B (local, 8-bit)",
         "coach": ("data/results/evolve_remote/v5/runs", "llm"),
@@ -112,7 +112,7 @@ VERSIONS = [
         "key": "v3",
         "label": "v3",
         "title": "v3: ledger veto, lock, playbook",
-        "internal": "v5p–v7p",
+        "internal": "#5p–#7p",
         "dates": "Sep 8–9",
         "llm": "Qwen3.8-27B (local, 4-bit)",
         "coach": ("data/results/evolve4/v7p/runs", "llm"),
@@ -123,10 +123,19 @@ VERSIONS = [
     },
 ]
 PPO_COLOR = "#8c8c8c"
+
+
+def _rev(name: str) -> str:
+    """Internal version name -> revision label used in the thesis (v7p -> #7p)."""
+    return "#" + name.lstrip("v")
+
+
 SEED_ALPHA = 0.45
 LEVER = "forward_velocity.target_ms"
 
 # internal lineage for fig8: (name, day offset from Sep 4, thesis version or None, verdict)
+# internal names (v5, v7p, ...) are shown as revision numbers (#5, #7p) so that they never
+# collide with the thesis versions v1-v3
 LINEAGE = [
     ("v1", 0.0, "v1", "iter"),
     ("v2", 0.7, "v1", "iter"),
@@ -222,7 +231,7 @@ def table9(data: dict[str, tuple[list[dict], list[dict]]]) -> pd.DataFrame:
         rows.append(
             {
                 "Version": v["label"],
-                "Internal Iterations": f"internal {v['internal']} ({v['dates']})",
+                "Internal Revisions": f"{v['internal']} ({v['dates']})",
                 "LLM": v["llm"],
                 "Decision Layer Added": v["added"],
                 "n Pairs": p["n"],
@@ -240,7 +249,7 @@ def table9(data: dict[str, tuple[list[dict], list[dict]]]) -> pd.DataFrame:
     rows.append(
         {
             "Version": "automated candidates",
-            "Internal Iterations": "internal " + ", ".join(cand["version"]) + " (Sep 8–9)",
+            "Internal Revisions": ", ".join(_rev(v) for v in cand["version"]) + " (Sep 8–9)",
             "LLM": "meta-LLM = coach LLM",
             "Decision Layer Added": "one prompt or threshold change each (max_params, "
             "intervention cap, release threshold, raise rule, noise_z)",
@@ -565,12 +574,12 @@ def fig8(data: dict[str, tuple[list[dict], list[dict]]]) -> None:
                 ax.plot(i, -0.7, marker="x", ms=5, color=col, lw=0, zorder=3)
             else:
                 ax.plot(i, -0.7, marker="o", mfc="white", mec=col, ms=4, lw=0, zorder=3)
-            ax.text(i, -0.95, name, ha="center", va="top", fontsize=6.2, color=col)
+            ax.text(i, -0.95, _rev(name), ha="center", va="top", fontsize=6.2, color=col)
         else:
             col = vcol[thesis]
             ms = 7 if kind == "measured" else 4.2
             ax.plot(i, 0, marker="o", ms=ms, color=col, mec="white", mew=0.6, lw=0, zorder=3)
-            ax.text(i, 0.28, name, ha="center", va="bottom", fontsize=6.4, color=col)
+            ax.text(i, 0.28, _rev(name), ha="center", va="bottom", fontsize=6.4, color=col)
             if name in dates:
                 ax.text(i, -0.3, dates[name], ha="center", va="top", fontsize=5.8, color="#666666")
     idx = {name: i for i, (name, *_r) in enumerate(LINEAGE)}
@@ -603,7 +612,7 @@ def fig8(data: dict[str, tuple[list[dict], list[dict]]]) -> None:
     ax.text(
         -0.8,
         2.35,
-        "(a) Internal iterations and the three thesis versions",
+        "(a) Internal revisions (#) and the three thesis versions",
         fontsize=8,
         weight="bold",
         va="top",
@@ -621,7 +630,7 @@ def fig8(data: dict[str, tuple[list[dict], list[dict]]]) -> None:
         defect = "driver defect" in str(r["note"])
         rows.append(
             (
-                f"{r['version']} vs incumbent  (n = {int(r['n_pairs'])})",
+                f"candidate {_rev(r['version'])} vs incumbent  (n = {int(r['n_pairs'])})",
                 r["dJ_mean"],
                 r["ci95_halfwidth"],
                 "#b2182b",

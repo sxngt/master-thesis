@@ -99,7 +99,7 @@ TABLE_NOTES = {
     "table4_difficulty_scaling": "SD, standard deviation over seeds; Falls, falls per minute. Easy / Medium / Hard follow the "
     "terrain difficulty levels of the terrain configuration files.",
     "table5_anymal_transfer": "SD, standard deviation over seeds; Falls, falls per minute; Cost of Transport, E / (m·g·d).",
-    "coach_versions_thesis": "v1–v3, the three coach versions reported in this thesis (internal iteration ranges in the first row); "
+    "coach_versions_thesis": "v1–v3, the three coach versions reported in this thesis; Internal Revisions, the numbered revisions (#, Ⅲ.4.F) collapsed into each version; "
     "n Pairs, (setting, seed) pairs against the no-coach PPO control of the same batch; ΔJ, paired "
     "difference LLM-PPO − PPO of the objective J = success rate + 0.5 × forward velocity; CI, t-based "
     "95 % confidence interval; d, paired Cohen's d; Naive Escape, runs that left the success-rate floor "
@@ -139,11 +139,11 @@ TABLE_NOTES = {
     "E / (m·g·d); Steps to Success 0.5, environment steps (millions) until the evaluated success rate "
     "first reached 0.5 (—, never); Interventions, settled coach proposals (kept or rolled back); "
     "Escaped, evaluated success rate exceeded 0.1 at least once during training.",
-    "appD_coach_history": "Gen., evolution generation and proposer (LLM, meta-LLM; hand, hand-written); Change, revision "
+    "appD_coach_history": "Revision, internal revision number (#, Ⅲ.4.F; p, playbook variant) — only #5 and #7p became thesis versions v2 and v3; Gen., evolution generation and proposer (LLM, meta-LLM; hand, hand-written); Change, revision "
     "relative to the parent version named first, which is also the paired comparison target unless "
     "the Note says otherwise (none, the no-coach PPO control); n, (setting, seed) pairs; ΔJ, paired difference of the final "
     "objective J; p, one-sided paired t-test (W, Wilcoxon signed-rank); d, paired Cohen's d. "
-    "Iterations 1–4 (GPT-5.4 batches) are summarised as v1 in the main text.",
+    "Revisions #1–#4 (GPT-5.4 batches) are summarised as v1 in the main text.",
     "run_history": "Noise, exploration noise of DDPG (ou, Ornstein–Uhlenbeck; parameter_space, parameter-space "
     "noise); Budget, environment steps; Wall Time, minutes on one RTX 4080; Attitude RMS, "
     "root-mean-square of roll and pitch (rad); Falls, falls per minute. Metrics from the original "

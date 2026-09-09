@@ -577,7 +577,9 @@ MATERIALS = [
             "예측 디코딩으로 9쌍을 측정하였다. 각 버전의 비교 대상은 같은 배치에서 같은 시드로 학습한 코치 "
             "없는 PPO이며, 배치마다 측정 규칙과 PPO 구현이 다르므로 버전 간에는 J의 절댓값이 아니라 배치 "
             "내 짝 차이 ΔJ만 비교한다. H항의 자가 진화에서 메타 LLM이 제안한 후보(내부 6차, 8~12차)는 모두 "
-            "기각되었으므로 어느 버전에도 포함되지 않으며, 13차례 개정의 전체 이력은 부록에 수록하였다.",
+            "기각되었으므로 어느 버전에도 포함되지 않으며, 13차례 개정의 전체 이력은 부록에 수록하였다. 표와 "
+            "그림에서 내부 개정은 차수 앞에 #을 붙여(예：#5, #7p；p는 플레이북 변형) 논문 버전 v1~v3과 "
+            "구별한다.",
             "G. 무작위·언덕오르기 대조군",
             "LLM의 기여를 개입 예산 자체의 효과와 분리하기 위하여 같은 개입 주기·파라미터 범위·변화 "
             "한도·판단층(잠금, 원장 거부권, 정착 효과 포함)을 공유하되 제안 규칙만 다른 두 대조군을 두었다. "
@@ -707,7 +709,7 @@ RESULTS = [
             "못한 결함이 있는 배치에서 판정되었다({Fig:coach_version_lineage}).",
             "[Table. Three Coach Versions Reported in This Thesis：Decision Layer, LLM, and Paired Objective Change "
             "against the Same-Batch PPO Control — tables/coach_versions_thesis.csv]",
-            "[Fig. Lineage of the Coach Versions and Paired ΔJ of Each Internal Iteration — figures/coach_version_lineage]",
+            "[Fig. Lineage of the Coach Versions and Paired ΔJ of Each Internal Revision — figures/coach_version_lineage]",
             "학습 중 J의 궤적({Fig:coach_objective_by_version})에서 요철 지형 상급은 세 버전 모두 LLM-PPO의 시드가 학습 후반에 "
             "1.5~1.6으로 수렴한 반면 PPO는 시드에 따라 1.6과 0.4 부근으로 갈라졌다. 계단 중급은 두 조건의 "
             "궤적이 겹쳐 버전에 따른 일관된 차이가 없었고, v1과 v3의 일부 시드는 학습 중반에 J가 급락한 뒤 "
