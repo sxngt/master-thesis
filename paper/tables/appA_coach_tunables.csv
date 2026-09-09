@@ -1,0 +1,15 @@
+Parameter,Lower,Upper,Scale,Per-Intervention Limit,Curriculum Lever,Description
+forward_velocity.target_ms,0.3,1.5,linear,±30%,yes,commanded speed tracked by exp(-4 (v_x - target)^2); also an observation
+energy.weight,-0.005,-1e-06,log,×/÷3,no,-(sum tau^2); walking sum tau^2 ~ 2000
+stability.weight,-3,-0.05,linear,±30%,no,-(roll^2 + pitch^2)
+foot_slip.weight,-1,-0.01,linear,±30%,no,-(sum tangential foot speed^2 while in contact)
+joint_limit.weight,-1,-0.02,linear,±30%,no,-(soft joint limit violation)
+action_rate.weight,-0.1,-0.001,log,×/÷3,no,-(sum (a_t - a_{t-1})^2)
+feet_air_time.weight,0,3,linear,±30%,no,+sum (air_time - target_s) at touchdown; gait prior
+feet_air_time.target_s,0.2,0.8,linear,±30%,no,desired swing duration [s]
+lateral_velocity.weight,-3,-0.05,linear,±30%,no,-(v_y^2)
+yaw_rate.weight,-2,-0.05,linear,±30%,no,-(yaw_rate^2)
+alive_bonus.weight,0,0.5,linear,±30%,no,+1 per step alive
+termination.weight,-30,-1,linear,±30%,no,one-off fall penalty
+algo.learning_rate,3e-05,0.001,log,×/÷3,no,Adam step size (default 3e-4)
+algo.entropy_coef,0.0001,0.05,log,×/÷3,no,entropy bonus; raises/keeps exploration noise (default 5e-3)

@@ -1,0 +1,43 @@
+Hyperparameter,PPO,TRPO,A3C,SAC,TD3,DDPG
+Learning rate,0.0003,—,0.0001,0.0003,0.0003,0.0001
+Discount γ,0.99,0.99,0.99,0.99,0.99,0.99
+GAE λ,0.95,0.95,—,—,—,—
+Clip range ε,0.2,—,—,—,—,—
+KL target,0.01,—,—,—,—,—
+KL β min,0.015625,—,—,—,—,—
+KL β max,8,—,—,—,—,—
+KL early stop,0.2,—,—,—,—,—
+Entropy coef,0.005,—,0.01,—,—,—
+Value coef,0.5,—,0.5,—,—,—
+Grad-norm clip,1,—,40,—,—,—
+Rollout steps / env,24,24,20,—,—,—
+Epochs,5,—,—,—,—,—
+Minibatches,4,—,—,—,—,—
+Max KL δ,—,0.01,—,—,—,—
+CG iterations,—,10,—,—,—,—
+CG damping,—,0.1,—,—,—,—
+Line-search steps,—,10,—,—,—,—
+Line-search backtrack,—,0.8,—,—,—,—
+Value LR,—,0.001,—,—,—,—
+Workers,—,—,32,—,—,—
+Grad accumulation,—,—,4,—,—,—
+Target τ,—,—,—,0.005,0.005,0.005
+Init temperature α,—,—,—,0.2,—,—
+Auto temperature,—,—,—,yes,—,—
+Double Q,—,—,—,yes,—,—
+Clipped double Q,—,—,—,—,yes,—
+Policy delay,—,—,—,—,2,—
+Target noise,—,—,—,—,0.2,—
+Target noise clip,—,—,—,—,0.5,—
+Exploration noise,—,—,—,—,0.1,—
+OU θ,—,—,—,—,—,0.15
+OU σ,—,—,—,—,—,0.2
+Param-noise σ,—,—,—,—,—,0.1
+Replay buffer,—,—,—,1000000,1000000,1000000
+Batch size,—,—,—,4096,4096,4096
+Warm-up steps,—,—,—,10000,10000,10000
+Steps / iteration,—,—,—,256,256,256
+Updates / step,—,—,—,16,16,16
+Actor hidden,512-256-128,512-256-128,512-256-128,512-256-128,512-256-128,512-256-128
+Critic hidden,512-512-256-128,512-512-256-128,512-512-256-128,512-512-256-128,512-512-256-128,512-512-256-128
+Activation,elu/elu,tanh/tanh,relu/relu,relu/relu,relu/relu,relu/relu
